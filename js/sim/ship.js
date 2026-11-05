@@ -240,16 +240,37 @@
   };
 
   /**
+   * 直接把一台设备打成 0 血（炮弹正中炮塔之类），并把它的剩余血量从所属结构区里扣掉，
+   * 保证「设备血条之和 = 结构区血条」这条账始终对得上。
+   */
+  Ship.prototype.killDevice = function (dev, zoneKey, world) {
+    if (!dev) return;
+    dev.hp = 0;
+    if (!this.zone || this.zone[zoneKey] == null) return;
+    // 结构区血条 = 底下所有设备之和，直接重算，账目永远对得上
+    if (N.Damage) N.Damage.syncZone(this, zoneKey);
+    else this.zone[zoneKey] = Math.max(0, this.zone[zoneKey] - 0);
+    if (this.zone[zoneKey] <= 0 && !this.zoneLost[zoneKey]) {
+      this.zoneLost[zoneKey] = true;
+      this.onZoneLost(zoneKey, world);
+    }
+  };
+
+  /**
    * 把某个结构区打掉若干点（单位与 hull 相同），并结算"这一块没了"的后果。
    * 返回 true 表示这一下刚好把它打光。
    */
   Ship.prototype.hitZone = function (k, amount, world, route) {
     if (!this.zone || this.zone[k] == null || !(amount > 0)) return false;
     var before = this.zone[k];
-    this.zone[k] = Math.max(0, before - amount);
-    // 同一笔伤害也落到具体设备上（炮塔/雷达/主机/舵机……）
-    if (N.Damage && (k === 'superstructure' || k === 'power')) {
+    // 有具体设备的区（武器 / 通信 / 动力）交给设备去分摊，
+    // 结构区血条由 syncZone 反推 —— 这样"设备血条之和 = 结构区血条"永远成立
+    var backed = N.Damage && (k === 'weapons' || k === 'comms' || k === 'power') &&
+      N.Damage.zoneDevices(this, k).length > 0;
+    if (backed) {
       N.Damage.routeDamage(this, k, amount, world, route);
+    } else {
+      this.zone[k] = Math.max(0, before - amount);
     }
     if (k === 'power') {
       this.power = 100 * (N.Damage && this.engines ? N.Damage.propulsion(this) : this.zoneFrac('power'));
@@ -300,14 +321,34 @@
 
   /** 给玩家看的结构摘要（只列已经打坏的） */
   Ship.prototype.structureText = function () {
-    var parts = [];
+    if (N.Damage && this.devList) {
+      // 三大系统：船体 / 上层结构（武器·通讯·其他）/ 动力系统（发动机·舵机·电力）
+      var y = N.Damage.systems(this);
+      var parts = [];
+      if (y.upper < 0.995) {
+        var sub = [];
+        if (y.weapons < 0.995) sub.push('武器' + Math.round(y.weapons * 100));
+        if (y.comms < 0.995) sub.push('通讯' + Math.round(y.comms * 100));
+        if (y.other < 0.995) sub.push('其他' + Math.round(y.other * 100));
+        parts.push('上层' + Math.round(y.upper * 100) + '%' + (sub.length ? '（' + sub.join(' ') + '）' : ''));
+      }
+      if (y.power < 0.995) {
+        var sub2 = [];
+        if (y.engines < 0.995) sub2.push('机' + Math.round(y.engines * 100));
+        if (y.rudder < 0.995) sub2.push('舵' + (y.rudder <= 0 ? '毁' : Math.round(y.rudder * 100)));
+        if (y.elec < 0.995) sub2.push('电' + (y.elec <= 0 ? '毁' : Math.round(y.elec * 100)));
+        parts.push('动力' + Math.round(y.power * 100) + '%' + (sub2.length ? '（' + sub2.join(' ') + '）' : ''));
+      }
+      return parts.join(' · ');
+    }
+    var old = [];
     var name = { weapons: '武器', comms: '通信', superstructure: '上层', power: '动力' };
     for (var k in name) {
       var f = this.zoneFrac(k);
       if (f >= 0.995) continue;
-      parts.push(name[k] + (f <= 0 ? '全毁' : Math.round(f * 100) + '%'));
+      old.push(name[k] + (f <= 0 ? '全毁' : Math.round(f * 100) + '%'));
     }
-    return parts.join(' · ');
+    return old.join(' · ');
   };
 
   /* ======================================================================= */
@@ -370,7 +411,10 @@
        搁浅之后只能以 4 节以内的速度慢慢往外蹭。 */
     var bowX = nx + hv.x * this.cls.length * 0.42;
     var bowY = ny + hv.y * this.cls.length * 0.42;
-    var onLand = world.isLand(nx, ny) || world.isLand(bowX, bowY);
+    // 船头、下一位置、还有舰体中心，只要有一个在陆地上就算触底 ——
+    // 少算中心的话，慢速蹭过窄礁盘的舰会一直"压着陆地"却不算搁浅
+    var onLand = world.isLand(nx, ny) || world.isLand(bowX, bowY) ||
+      world.isLand(this.pos.x, this.pos.y);
 
     if (onLand) {
       if (!this.aground && this.speed > 1.5 && world.time - this.groundT > 6) {
@@ -396,7 +440,23 @@
         var my = this.pos.y + hv3.y * this.speed * U.KNOT_MS * dt;
         // 已经陷在岸上的允许往外爬，否则一步也不许再往陆地里走
         var stuckIn = world.isLand(this.pos.x, this.pos.y);
-        if (stuckIn || !world.isLand(mx, my)) {
+        if (stuckIn) {
+          // 舰体中心已经在陆地上：拖船把它往最近的水面拽，越深拽得越快，
+          // 免得一艘残废的舰以 4 节的速度在岛中央爬好几分钟
+          var wpt2 = world.nearestWater ? world.nearestWater(this.pos.x, this.pos.y, 30000) : null;
+          if (wpt2) {
+            var dd = V.dist(this.pos, wpt2);
+            var tug = Math.min(dd, 4 + dd * 0.012);          // 米/秒
+            var ux = (wpt2.x - this.pos.x) / (dd || 1);
+            var uy = (wpt2.y - this.pos.y) / (dd || 1);
+            var stepLen = Math.min(dd, tug * dt);
+            this.pos.x += ux * stepLen;
+            this.pos.y += uy * stepLen;
+            this.heading = U.approachAngle(this.heading, Geo.bearing(this.pos, wpt2),
+              escapeTurn * dt * 2.5);
+            this.speed = Math.max(this.speed, 1.2);
+          }
+        } else if (!world.isLand(mx, my)) {
           this.pos.x = mx;
           this.pos.y = my;
         } else {
@@ -589,15 +649,15 @@
     }
     if (d.mountHit !== undefined && this.mounts[d.mountHit]) {
       var mh = this.mounts[d.mountHit];
+      this.killDevice(mh, 'weapons', world);
       mh.disabled = true;
       mh.ready = false;
       mh.destroyed = true;
-      mh.hp = 0;
     }
-    if (d.radar) { this.radarDestroyed = true; if (this.radarDev) this.radarDev.hp = 0; }
+    if (d.radar) { this.killDevice(this.radarDev, 'comms', world); this.radarDestroyed = true; }
     if (d.fc) this.fcDestroyed = true;
-    if (d.radio) { this.radioDestroyed = true; if (this.radioDev) this.radioDev.hp = 0; }
-    if (d.iff) { this.iffDestroyed = true; if (this.iffDev) this.iffDev.hp = 0; }
+    if (d.radio) { this.killDevice(this.radioDev, 'comms', world); this.radioDestroyed = true; }
+    if (d.iff) { this.killDevice(this.iffDev, 'comms', world); this.iffDestroyed = true; }
 
     this.hitsTaken++;
     this.lastDamageTime = world.time;

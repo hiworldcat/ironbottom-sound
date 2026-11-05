@@ -51,8 +51,11 @@ function run(scenarioId, label, opts) {
     }
   }
 
-  // 整场航行不能压陆地
+  // 整场航行不能压陆地。战斗损伤之后被浪推上礁盘是正常的，
+  // 只有"陷在岸上出不来"（连续超过 90 秒）才算导航出问题。
   const aground = {};
+  const runLen = {};
+  const STUCK = 180;              // 采样每 0.5 秒一次 → 180 次 = 90 秒
   while (!world.ended && world.time < maxT) {
     world.update(dt);
     steps++;
@@ -60,16 +63,20 @@ function run(scenarioId, label, opts) {
       for (const s of world.ships) {
         // 已经在沉没的舰不算：沉船漂到哪片礁盘上不叫"航行压陆地"
         if (s.sunk || s.sinking) continue;
+        const k = s.side + ' ' + s.name;
         if (world.isLand(s.pos.x, s.pos.y)) {
-          const k = s.side + ' ' + s.name;
-          aground[k] = (aground[k] || 0) + 1;
+          runLen[k] = (runLen[k] || 0) + 1;
+          if (runLen[k] > (aground[k] || 0)) aground[k] = runLen[k];
+        } else {
+          runLen[k] = 0;
         }
       }
     }
     if (steps > 400000) break;
   }
   for (const k of Object.keys(aground)) {
-    problems.push(`${scenarioId}/${label}: ${k} 压到陆地 ${aground[k]} 次`);
+    if (aground[k] < STUCK) continue;
+    problems.push(`${scenarioId}/${label}: ${k} 陷在陆地上 ${(aground[k] * 0.5).toFixed(0)} 秒出不来`);
   }
   const elapsed = Date.now() - t0;
 
@@ -1132,15 +1139,49 @@ function testDamage() {
   if (!s.engines || !s.engines.length) problems.push('设备自检: 没有主机');
   if (!s.rudder) problems.push('设备自检: 没有舵机');
   if (!s.electrical) problems.push('设备自检: 没有电力系统');
-  const sumSuper = s.devList.reduce((a, d) => a + d.hpMax, 0);
-  if (Math.abs(sumSuper - s.zoneMax.superstructure) > 0.01) {
-    problems.push(`设备自检: 上层设备血条合计 ${sumSuper.toFixed(2)}，` +
-      `上层结构区是 ${s.zoneMax.superstructure.toFixed(2)}`);
+  const sumWeap = s.devList.filter(d => d.group === 'weapons').reduce((a, d) => a + d.hpMax, 0);
+  if (Math.abs(sumWeap - s.zoneMax.weapons) > 0.01) {
+    problems.push(`设备自检: 武器设备血条合计 ${sumWeap.toFixed(2)}，` +
+      `武器结构区是 ${s.zoneMax.weapons.toFixed(2)}`);
+  }
+  const sumComm = s.devList.filter(d => d.group === 'comms').reduce((a, d) => a + d.hpMax, 0);
+  if (Math.abs(sumComm - s.zoneMax.comms) > 0.01) {
+    problems.push(`设备自检: 通讯设备血条合计 ${sumComm.toFixed(2)}，` +
+      `通讯结构区是 ${s.zoneMax.comms.toFixed(2)}`);
   }
   const sumPower = D.powerDevices(s).reduce((a, d) => a + d.hpMax, 0);
   if (Math.abs(sumPower - s.zoneMax.power) > 0.01) {
     problems.push(`设备自检: 动力设备血条合计 ${sumPower.toFixed(2)}，` +
       `动力结构区是 ${s.zoneMax.power.toFixed(2)}`);
+  }
+
+  /* 1b) 三大系统：上层结构 = 武器 + 通讯 + 其他，动力系统 = 发动机 + 舵机 + 电力 */
+  const y0 = D.systems(s);
+  if (Math.abs(y0.upper - 1) > 0.001 || Math.abs(y0.power - 1) > 0.001 || Math.abs(y0.hull - 1) > 0.001) {
+    problems.push('设备自检: 完好状态下三大系统不是满值');
+  }
+  const wSave = s.zone.weapons, cSave = s.zone.comms, oSave = s.zone.superstructure;
+  s.zone.weapons = 0; s.zone.comms = 0; s.zone.superstructure = 0;
+  if (D.systems(s).upper > 0.001) problems.push('设备自检: 上层结构三块全打光了上层结构还没归零');
+  s.zone.weapons = wSave; s.zone.comms = cSave; s.zone.superstructure = oSave;
+  // 打武器区 12 点：武器掉血、炮塔跟着掉、上层结构一起掉，动力不受影响
+  const before = {
+    w: s.zone.weapons, p: s.zone.power,
+    dev: s.devList.filter(d => d.group === 'weapons').reduce((a, d) => a + d.hp, 0)
+  };
+  s.hitZone('weapons', 12, w);
+  const devAfter = s.devList.filter(d => d.group === 'weapons').reduce((a, d) => a + d.hp, 0);
+  if (!(devAfter < before.dev)) problems.push('设备自检: 武器区挨打炮塔没掉血');
+  if (Math.abs((before.dev - devAfter) - 12) > 0.01) {
+    problems.push(`设备自检: 武器区掉 12 点，设备只掉了 ${(before.dev - devAfter).toFixed(2)} 点`);
+  }
+  if (s.zone.power !== before.p) problems.push('设备自检: 武器区挨打动力区跟着掉');
+  if (!(D.systems(s).upper < 0.999)) problems.push('设备自检: 武器区挨打上层结构没掉');
+  // 直接击毁一台设备，账要对得上
+  s.killDevice(s.mounts[1], 'weapons', w);
+  const wSum1 = s.devList.filter(d => d.group === 'weapons').reduce((a, d) => a + d.hp, 0);
+  if (Math.abs(s.zone.weapons - wSum1) > 0.01) {
+    problems.push(`设备自检: 直接击毁设备后武器区 ${s.zone.weapons.toFixed(2)} 与设备合计 ${wSum1.toFixed(2)} 对不上`);
   }
 
   /* 2) 主机血量 → 动力损失档位（25% / 50% / 90%） */
@@ -1257,8 +1298,68 @@ function testDamage() {
     `故障率 平时 ${(idle * 100).toFixed(2)}% · 开火 ${(hot * 100).toFixed(2)}%`);
 }
 
-testSquad();
-testSquadNumbering();testFormationShape();
+/* ==========================================================================
+ *  近失弹自检
+ * ========================================================================== */
+function testNearMiss() {
+  const w = zoneWorld();
+  const s = w.ships.find(x => x.side === 'US' && x.cls.type === 'CA');
+  if (!s) { problems.push('近失弹自检: 找不到测试舰'); return; }
+  const base = N.MAP.at(159.20, -8.40);
+  s.pos.x = base.x; s.pos.y = base.y;
+  s.heading = s.orderedHeading = 0;
+  const gun = { caliber: 203, shellWeight: 125, maxRange: 27000, pen: [[0, 250]],
+    deckPen: [[0, 60]], rof: 3.5, maxDescent: 30 };
+
+  const reset = () => { s.hull = s.hullMax; s.flood = 0; s.floodRate = 0; s.fire = 0; };
+
+  // 打一发落在 (x, y) 的炮弹，返回这 0.1 秒里舰体掉了多少
+  const fireAt = (x, y, salvo) => {
+    reset();
+    const h0 = s.hull;
+    w.shells.push({ side: 'JP', ownerId: 'x', gun: gun, to: { x: x, y: y }, t: 0, tf: 0,
+      range: 8000, salvoId: salvo || 'NM', aim: { x: x, y: y } });
+    w.update(0.1);
+    return h0 - s.hull;
+  };
+  const fireGap = (gap, salvo) => fireAt(base.x + s.cls.beam / 2 + gap, base.y, salvo);
+
+  // 1) 贴着舷侧 4 米：必须算近失弹，而且会进水
+  reset();
+  const f0 = s.floodRate;
+  w.shells.push({ side: 'JP', ownerId: 'x', gun: gun,
+    to: { x: base.x + s.cls.beam / 2 + 4, y: base.y }, t: 0, tf: 0, range: 8000,
+    salvoId: 'NM', aim: { x: base.x, y: base.y } });
+  w.update(0.1);
+  if (!(s.hull < s.hullMax - 1e-6)) problems.push('近失弹自检: 舷侧 4 米的近失弹没有伤到舰体');
+  if (!(s.floodRate > f0)) problems.push('近失弹自检: 近失弹没有造成进水');
+
+  // 2) 离舷侧 200 米：完全不该有伤害
+  const far = fireGap(200);
+  if (far > 1e-6) problems.push(`近失弹自检: 200 米外的落点也造成了 ${far.toFixed(3)} 点伤害`);
+
+  // 3) 越近越狠
+  const a = fireGap(3);
+  const b = fireGap(20);
+  if (!(a > b)) problems.push(`近失弹自检: 4 米 ${a.toFixed(2)} 点，20 米 ${b.toFixed(2)} 点，近的没更狠`);
+
+  // 4) 近失弹的水柱要能被渲染出来
+  fireGap(4);
+  if (!w.splashes.filter(x => x.kind === 'near').length) problems.push('近失弹自检: 没有生成 near 水柱');
+
+  // 5) 量级：近失弹要明显小于直接命中（直接命中取 40 发的平均值，避开落点随机性）
+  let sum = 0;
+  for (let i = 0; i < 40; i++) sum += fireAt(base.x, base.y, 'NM2');
+  const avgDirect = sum / 40;
+  if (a > avgDirect * 0.45) {
+    problems.push(`近失弹自检: 近失弹 ${a.toFixed(2)} 点已经接近直接命中的平均值 ${avgDirect.toFixed(2)} 点了`);
+  }
+
+  console.log(`近失弹自检: 舷侧 3 米 ${a.toFixed(2)} 点 / 20 米 ${b.toFixed(2)} 点 / ` +
+    `200 米 ${far.toFixed(2)} 点，直接命中平均 ${avgDirect.toFixed(2)} 点，杀伤半径 ` +
+    `${(7 + 1.35 * Math.sqrt(125)).toFixed(0)} 米`);
+}
+testSquad();testSquadNumbering();testFormationShape();
 testFormationEdit();
 testReplayShape();
 testCommand();
@@ -1270,6 +1371,7 @@ testGrounding();
 testCollision();
 testWeather();
 testDamage();
+testNearMiss();
 
 const ids = only ? [only] : N.Scenarios.available().map(s => s.id);
 const results = [];

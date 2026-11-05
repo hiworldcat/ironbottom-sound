@@ -40,7 +40,12 @@
       detailBody: $('detailBody'),
       dName: $('dName'),
       dClass: $('dClass'),
-      barHull: $('barHull'), txtHull: $('txtHull'),
+      barSysHull: $('barSysHull'), txtSysHull: $('txtSysHull'),
+      barUpper: $('barUpper'), txtUpper: $('txtUpper'),
+      barPowerSys: $('barPowerSys'), txtPowerSys: $('txtPowerSys'),
+      barEngines: $('barEngines'), txtEngines: $('txtEngines'),
+      barRudder: $('barRudder'), txtRudder: $('txtRudder'),
+      barElec: $('barElec'), txtElec: $('txtElec'),
       barFlood: $('barFlood'), txtFlood: $('txtFlood'),
       barFire: $('barFire'), txtFire: $('txtFire'),
       barZonePower: $('barZonePower'), txtZonePower: $('txtZonePower'),
@@ -850,29 +855,50 @@
     var spdNow = vw && vw.speed != null ? vw.speed : ship.speed;
     var hdgNow = vw && vw.heading != null ? vw.heading : ship.heading;
 
-    var hp = U.clamp01(hullNow / ship.hullMax);
-    this.el.barHull.style.width = (hp * 100) + '%';
-    this.el.barHull.style.background = hp < 0.35 ? 'var(--red)' : (hp < 0.7 ? 'var(--amber)' : 'var(--cyan)');
-    this.el.txtHull.textContent = Math.round(hullNow);
     this.el.barFlood.style.width = U.clamp01(floodNow / 100) * 100 + '%';
     this.el.txtFlood.textContent = Math.round(floodNow);
     this.el.barFire.style.width = U.clamp01(fireNow / 100) * 100 + '%';
     this.el.txtFire.textContent = Math.round(fireNow);
     this.el.dStatus.textContent = stale ? '数据已过期（无线电报告）' : ship.statusText();
 
-    /* 结构分区：动力/武器/上层/通信 各自的剩余比例 */
+    /* 结构分区：船体 / 上层结构（武器·通讯·其他）/ 动力系统（发动机·舵机·电力） */
     var zf = vw && vw.zones ? vw.zones : null;
-    var zoneRow = function (bar, txt, k) {
-      var f = zf && zf[k] != null ? zf[k] : (ship.zoneFrac ? ship.zoneFrac(k) : 1);
-      if (!bar || !txt) return;
-      bar.style.width = (U.clamp01(f) * 100) + '%';
-      bar.className = f <= 0 ? 'dead' : (f < 0.5 ? 'warn' : '');
-      txt.textContent = f <= 0 ? '毁' : Math.round(f * 100);
+    var sys = N.Damage ? N.Damage.systems(ship) : null;
+    var dv0 = (vw && vw.dev) ? vw.dev : null;
+    if (sys) {
+      // 上层结构三块跟着报告走
+      if (zf) {
+        if (zf.weapons != null) sys.weapons = zf.weapons;
+        if (zf.comms != null) sys.comms = zf.comms;
+        if (zf.superstructure != null) sys.other = zf.superstructure;
+        if (zf.power != null) sys.power = zf.power;
+        var wm = ship.zoneMax.weapons, cm = ship.zoneMax.comms, om = ship.zoneMax.superstructure;
+        sys.upper = U.clamp01((sys.weapons * wm + sys.comms * cm + sys.other * om) / (wm + cm + om));
+      }
+      if (dv0) {
+        if (dv0.engFrac != null) sys.engines = dv0.engFrac;
+        if (dv0.rudderFrac != null) sys.rudder = dv0.rudderFrac;
+        if (dv0.elecFrac != null) sys.elec = dv0.elecFrac;
+      }
+    }
+    var bar = function (barEl, txtEl, f, deadWord) {
+      if (!barEl || !txtEl) return;
+      f = U.clamp01(f);
+      barEl.style.width = (f * 100) + '%';
+      barEl.className = f <= 0 ? 'dead' : (f < 0.5 ? 'warn' : '');
+      txtEl.textContent = f <= 0 ? (deadWord || '毁') : Math.round(f * 100);
     };
-    zoneRow(this.el.barZonePower, this.el.txtZonePower, 'power');
-    zoneRow(this.el.barZoneWeapons, this.el.txtZoneWeapons, 'weapons');
-    zoneRow(this.el.barZoneSuper, this.el.txtZoneSuper, 'superstructure');
-    zoneRow(this.el.barZoneComms, this.el.txtZoneComms, 'comms');
+    if (sys) {
+      bar(this.el.barSysHull, this.el.txtSysHull, sys.hull);
+      bar(this.el.barUpper, this.el.txtUpper, sys.upper);
+      bar(this.el.barZoneWeapons, this.el.txtZoneWeapons, sys.weapons);
+      bar(this.el.barZoneComms, this.el.txtZoneComms, sys.comms);
+      bar(this.el.barZoneSuper, this.el.txtZoneSuper, sys.other);
+      bar(this.el.barPowerSys, this.el.txtPowerSys, sys.power);
+      bar(this.el.barEngines, this.el.txtEngines, sys.engines);
+      bar(this.el.barRudder, this.el.txtRudder, sys.rudder);
+      bar(this.el.barElec, this.el.txtElec, sys.elec);
+    }
 
     this.renderDevices(ship, world, stale, vw);
 
@@ -975,9 +1001,11 @@
     var spot = ship.spotting;
     if (spot && world.time - spot.t < 90) {
       var txt = spot.kind === 'hit' ? '命中' : (spot.kind === 'straddle' ? '跨射' : '未跨射');
+      if (spot.near) txt += ' · 近失 ' + spot.near;
       var acc = Math.round((1 - ship.errorScale) * 100);
       this.el.dSpot.textContent = txt + ' · 火控收敛 ' + acc + '%';
-      this.el.dSpot.style.color = spot.kind === 'miss' ? 'var(--dim)' : 'var(--green)';
+      this.el.dSpot.style.color = spot.kind === 'miss'
+        ? (spot.near ? 'var(--amber)' : 'var(--dim)') : 'var(--green)';
     } else {
       this.el.dSpot.textContent = '未校射 · 火控收敛 ' + Math.round((1 - ship.errorScale) * 100) + '%';
       this.el.dSpot.style.color = '';
@@ -1647,9 +1675,12 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>起火</b>的舰自己就是一根烟囱：烟顺风飘，挡在观察者和目标之间时瞭望会打折；不过夜里火光也最好认</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>鼠标停在顶栏气象条上，能看到当前雷达和无线电被削了多少</span></div>' +
       '<div class="obj-head" style="margin-top:12px"><span>设备与损管</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>详情面板的「结构分区」按<b>三大系统</b>显示：<b>船体结构</b>（打光就沉）、<b>上层结构</b>（武器 + 通讯 + 其他）、<b>动力系统</b>（发动机 + 舵机 + 电力）</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>子条各算各的：打武器区、打通讯区，上层结构那一行跟着掉；掉一台主机、打坏舵机、电力故障，动力系统那一行跟着掉</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>每艘舰拆成<b>具体设备</b>：每座炮塔、每个鱼雷发射管、雷达、电台、敌我识别器、每台主机、舵机、电力系统，各自有血条</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>故障</b>是自己坏的：每 5 分钟 <b>1%</b>，修好也是每 5 分钟 <b>10%</b>。<b>开火</b>时故障率 +2%、修复率 −4%；<b>全速</b>时 +1% / −2%</span></div>' +
-      '<div class="obj-item"><span class="ob-mark">·</span><span><b>损坏</b>是别人打的（炮弹、鱼雷、近失弹、起火），<b>修不好</b>。设备血条算在上层建筑里，上层塌了设备跟着全毁</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>近失弹</b>：落在舷侧几十米内的炮弹会撕开船壳、造成进水。口径越大杀伤半径越远（八英寸约 22 米）；自己打的齐射有近失时，火控修正比纯打偏快，面板会写「近失 3」</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>损坏</b>是别人打的（炮弹、鱼雷、近失弹、起火），<b>修不好</b>。武器区、通讯区、动力区打光了，里面挂着的设备跟着全毁</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>主机每坏一档就掉动力：血条 &lt;100% 掉 25%，&lt;75% 掉 50%，&lt;50% 掉 90%；<b>故障</b>再叠 25/50/75%。故障和损坏<b>可以叠加</b></span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>舵机</b>：血条 &lt;100% 转向时间 ×2，&lt;75% ×3，&lt;50% ×5；舵机<b>卡死</b>再 ×2。舵机故障只在全速时才容易出</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>电力系统</b>一失灵，雷达、电台、识别器全停，无线电延迟 +1 分钟，炮击间隔 ×1.5，鱼雷装填 ×2，识别错误率 +1%；动力系统掉到 25% 以下也会连带失灵</span></div>' +

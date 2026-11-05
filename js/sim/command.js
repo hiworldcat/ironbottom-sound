@@ -234,6 +234,11 @@
       engFault: engFault,
       prop: D ? D.propulsion(ship) : 1,
       turn: D ? D.turnFactor(ship) : 1,
+      engFrac: D ? D.engineFrac(ship) : 1,
+      rudderFrac: ship.rudder && ship.rudder.hpMax > 0
+        ? Math.max(0, ship.rudder.hp) / ship.rudder.hpMax : 1,
+      elecFrac: ship.electrical && ship.electrical.hpMax > 0
+        ? Math.max(0, ship.electrical.hp) / ship.electrical.hpMax : 1,
       elec: D ? D.elecFailed(ship) : false,
       radar: D ? D.radarOk(ship) : !ship.radarDestroyed,
       radio: D ? D.radioOk(ship) : !ship.radioDestroyed,

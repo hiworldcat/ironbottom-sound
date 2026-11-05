@@ -431,10 +431,13 @@
 
   /* ------------------------------------------------------------------ 特效 */
   World.prototype.addSplash = function (pos, side, kind, ownerId, caliber) {
+    var big = kind === 'near';
     this.splashes.push({
       pos: { x: pos.x, y: pos.y },
-      r: 6, maxR: kind === 'torpedo' ? 60 : 32,
-      t: 0, life: kind === 'torpedo' ? 4.5 : 3.0,
+      r: big ? 10 : 6,
+      maxR: kind === 'torpedo' ? 60 : (big ? 48 : 32),
+      t: 0,
+      life: kind === 'torpedo' ? 4.5 : (big ? 3.6 : 3.0),
       side: side, kind: kind || 'shell',
       ownerId: ownerId || null,
       cal: caliber || 0

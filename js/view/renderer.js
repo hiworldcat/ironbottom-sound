@@ -484,6 +484,9 @@
       ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
       if (sp.kind === 'dud') {
         ctx.strokeStyle = 'rgba(255,180,90,' + (life * 0.8) + ')';
+      } else if (sp.kind === 'near') {
+        // 近失弹：水柱更大更白，边缘带一点暖色，一眼能看出「差一点」
+        ctx.strokeStyle = 'rgba(255,236,210,' + (life * 0.9) + ')';
       } else if (replay && sp.kind !== 'torpedo') {
         // 回放里按发射方染色，一眼看出这轮齐射是谁打的
         ctx.strokeStyle = isEnemy
@@ -492,14 +495,16 @@
       } else {
         ctx.strokeStyle = 'rgba(230,245,255,' + (life * 0.75) + ')';
       }
-      ctx.lineWidth = sp.kind === 'torpedo' ? 2.5 : 1.5;
+      ctx.lineWidth = sp.kind === 'torpedo' ? 2.5 : (sp.kind === 'near' ? 2 : 1.5);
       ctx.stroke();
 
       if (sp.kind === 'torpedo') {
         ctx.fillStyle = 'rgba(255,200,120,' + (life * 0.35) + ')';
         ctx.beginPath(); ctx.arc(s.x, s.y, rr * 0.5, 0, Math.PI * 2); ctx.fill();
       } else {
-        ctx.fillStyle = 'rgba(210,235,255,' + (life * 0.22) + ')';
+        ctx.fillStyle = sp.kind === 'near'
+          ? 'rgba(255,240,220,' + (life * 0.30) + ')'
+          : 'rgba(210,235,255,' + (life * 0.22) + ')';
         ctx.beginPath(); ctx.arc(s.x, s.y, rr * 0.6, 0, Math.PI * 2); ctx.fill();
       }
     }

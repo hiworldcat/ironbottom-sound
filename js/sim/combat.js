@@ -233,9 +233,59 @@
     }
   }
 
+  /**
+   * 落点到舰体矩形外缘的距离（米）。落在矩形里返回 0。
+   * 直接命中判定用的是 inShipRect(pad=6)，这里算的是「差一点」还差多少。
+   */
+  function hullGap(p, ship) {
+    var dx = p.x - ship.pos.x, dy = p.y - ship.pos.y;
+    var r = -ship.heading * Math.PI / 180;
+    var c = Math.cos(r), s = Math.sin(r);
+    var u = dx * s + dy * c;      // 沿船首
+    var w = dx * c - dy * s;      // 横向
+    var du = Math.abs(u) - ship.cls.length / 2;
+    var dw = Math.abs(w) - ship.cls.beam / 2;
+    if (du <= 0 && dw <= 0) return 0;
+    du = Math.max(0, du);
+    dw = Math.max(0, dw);
+    return Math.sqrt(du * du + dw * dw);
+  }
+
+  /** 近失弹的杀伤半径：口径越大，水柱能伤到的范围越远 */
+  function nearMissRadius(gun) {
+    return 7 + 1.35 * Math.sqrt(gun.shellWeight || 25);
+  }
+
+  /**
+   * 近失弹：炮弹在舷侧不远的水里炸开。
+   * 打不穿主装，但水压、破片和冲击会伤船壳、撕开进水口，并把机械震坏一点。
+   * 量级只有直接命中的 3%~12%，但它是「损坏」——修不回来。
+   */
+  function resolveNearMiss(world, ship, shell, gap, nearR) {
+    var gun = shell.gun;
+    var k = U.clamp01(1 - gap / nearR);          // 越近越狠，0~1
+    var base = 6 * Math.pow(gun.shellWeight / 25, 0.55);
+
+    ship.applyDamage({
+      hull: base * (0.03 + 0.085 * k),
+      flood: base * 0.05 * k,
+      floodRate: base * (0.00035 + 0.0011 * k),
+      fire: 0,
+      power: 0,
+      steering: 0,
+      struct: { power: base * 0.09 * k }
+    }, world);
+
+    if (k > 0.45) {
+      world.log(ship.side, '💥 ' + ship.name + ' 舷侧近失弹，舰体被水压挤伤', 'warn');
+    }
+    return k;
+  }
+
   function impact(world, shell) {
     var rng = world.rng;
     var hitShip = null;
+    var nearShip = null, nearGap = 1e9;
 
     /* ---- 岸轰炮弹 ---- */
     if (shell.shoreTargetId) {
@@ -248,7 +298,7 @@
       return;
     }
 
-    // 落点附近有没有敌舰
+    // 落点附近有没有敌舰：先看有没有直接命中，再记下最近的一艘算近失
     for (var i = 0; i < world.ships.length; i++) {
       var sh = world.ships[i];
       if (sh.side === shell.side || sh.sunk || !sh.alive) continue;
@@ -256,6 +306,8 @@
         hitShip = sh;
         break;
       }
+      var g = hullGap(shell.to, sh);
+      if (g < nearGap) { nearGap = g; nearShip = sh; }
     }
 
     var salvo = world.salvoes[shell.salvoId];
@@ -264,9 +316,13 @@
       resolveHit(world, hitShip, shell);
       if (salvo) salvo.hits++;
     } else {
-      // 水柱
-      world.addSplash(shell.to, shell.side, 'shell', shell.ownerId, shell.gun.caliber);
+      // 没打中 —— 但落在舷侧近处就是近失弹
+      var nearR = nearMissRadius(shell.gun);
+      var k = 0;
+      if (nearShip && nearGap <= nearR) k = resolveNearMiss(world, nearShip, shell, nearGap, nearR);
+      world.addSplash(shell.to, shell.side, k > 0 ? 'near' : 'shell', shell.ownerId, shell.gun.caliber);
       if (salvo) {
+        if (k > 0) salvo.near = (salvo.near || 0) + 1;
         var tr = salvo.targetTrack;
         if (tr) {
           // 以“落点到本舰的距离”与“目标到本舰的距离”比较，判断近失/远失
@@ -306,8 +362,9 @@
         world.log(ship.side, '跨射！' + ship.name + ' 已对目标夹叉，火控修正中', 'good');
       }
     } else {
-      ship.errorScale = Math.max(0.30, ship.errorScale * 0.93);
-      ship.spotting = { kind: 'miss', t: world.time };
+      // 一发没中，但夹叉里带着近失弹：火控修正得比纯打偏好一点
+      ship.errorScale = Math.max(0.30, ship.errorScale * (salvo.near ? 0.86 : 0.93));
+      ship.spotting = { kind: 'miss', near: salvo.near || 0, t: world.time };
     }
   }
 

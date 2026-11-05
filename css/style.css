@@ -499,6 +499,15 @@ kbd {
 .bar-row .bar.zone i { background: #6fe0c0; }
 .bar-row .bar.zone i.warn { background: var(--amber); }
 .bar-row .bar.zone i.dead { background: var(--red); }
+
+/* 三大系统：主条（船体 / 上层结构 / 动力系统）+ 缩进的子条 */
+.bar-row.major > span { width: 52px; color: var(--text); }
+.bar-row.major .bar { height: 6px; }
+.bar-row.major b { color: var(--text); }
+.bar-row.sub { padding-left: 12px; margin-bottom: 4px; }
+.bar-row.sub > span { width: 40px; color: var(--dim2); font-size: 10.5px; }
+.bar-row.sub .bar { height: 4px; }
+.bar-row.sub b { font-size: 10.5px; color: var(--dim); width: 26px; }
 .bar-row b { font-family: var(--mono); font-size: 11px; width: 30px; text-align: right; color: var(--text); font-weight: 400; }
 .d-status { font-size: 11px; color: var(--amber); margin-top: 8px; min-height: 15px; }
 

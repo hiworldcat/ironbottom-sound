@@ -124,14 +124,12 @@
       faulted: false, destroyed: false
     };
 
-    /* ---- 上层建筑：炮塔 / 鱼雷管 / 雷达 / 识别器 / 电台 ---- */
-    var superW = {};
-    ship.mounts.forEach(function (m, k) { superW['m' + k] = 1.6; });
-    ship.torps.forEach(function (t, k) { superW['t' + k] = 1.0; });
-    superW.radar = 1.0;
-    superW.radio = 0.7;
-    superW.iff = 0.5;
-    var shp = shareHP(ship.zoneMax.superstructure, superW);
+    /* ---- 上层建筑：武器（炮塔 / 鱼雷管）+ 通讯（雷达 / 电台 / 识别器） ---- */
+    var weaponW = {}, commW = { radar: 1.0, radio: 0.7, iff: 0.5 };
+    ship.mounts.forEach(function (m, k) { weaponW['m' + k] = 1.6; });
+    ship.torps.forEach(function (t, k) { weaponW['t' + k] = 1.0; });
+    var whp = shareHP(ship.zoneMax.weapons, weaponW);
+    var chp = shareHP(ship.zoneMax.comms, commW);
 
     /* ---- 设备清单（统一遍历用） ---- */
     ship.devList = [];
@@ -139,10 +137,10 @@
     ship.mounts.forEach(function (m, k) {
       m.fault = false;
       m.destroyed = !!m.disabled;
-      m.hpMax = shp['m' + k];
+      m.hpMax = whp['m' + k];
       m.hp = m.destroyed ? 0 : m.hpMax;
       ship.devList.push({
-        kind: 'gun', group: 'superstructure', obj: m,
+        kind: 'gun', group: 'weapons', obj: m,
         name: m.label + ' 炮塔', short: m.label + '炮',
         get hp() { return m.hp; }, set hp(v) { m.hp = v; },
         get hpMax() { return m.hpMax; },
@@ -154,10 +152,10 @@
     ship.torps.forEach(function (t, k) {
       t.fault = false;
       t.destroyed = !!t.disabled;
-      t.hpMax = shp['t' + k];
+      t.hpMax = whp['t' + k];
       t.hp = t.destroyed ? 0 : t.hpMax;
       ship.devList.push({
-        kind: 'torp', group: 'superstructure', obj: t,
+        kind: 'torp', group: 'weapons', obj: t,
         name: t.label + ' 号鱼雷发射管', short: t.label + '号鱼雷',
         get hp() { return t.hp; }, set hp(v) { t.hp = v; },
         get hpMax() { return t.hpMax; },
@@ -166,12 +164,12 @@
       });
     });
 
-    ship.radarDev = { hpMax: shp.radar, hp: ship.radarDestroyed ? 0 : shp.radar, faulted: false };
-    ship.radioDev = { hpMax: shp.radio, hp: ship.radioDestroyed ? 0 : shp.radio, faulted: false };
-    ship.iffDev = { hpMax: shp.iff, hp: ship.iffDestroyed ? 0 : shp.iff, faulted: false };
+    ship.radarDev = { hpMax: chp.radar, hp: ship.radarDestroyed ? 0 : chp.radar, faulted: false };
+    ship.radioDev = { hpMax: chp.radio, hp: ship.radioDestroyed ? 0 : chp.radio, faulted: false };
+    ship.iffDev = { hpMax: chp.iff, hp: ship.iffDestroyed ? 0 : chp.iff, faulted: false };
 
     ship.devList.push({
-      kind: 'radar', group: 'superstructure', obj: ship.radarDev,
+      kind: 'radar', group: 'comms', obj: ship.radarDev,
       name: (cls.radar && cls.radar.name) || '雷达', short: '雷达',
       get hp() { return ship.radarDev.hp; }, set hp(v) { ship.radarDev.hp = v; },
       get hpMax() { return ship.radarDev.hpMax; },
@@ -179,7 +177,7 @@
       get destroyed() { return ship.radarDestroyed; }
     });
     ship.devList.push({
-      kind: 'radio', group: 'superstructure', obj: ship.radioDev,
+      kind: 'radio', group: 'comms', obj: ship.radioDev,
       name: '无线电', short: '电台',
       get hp() { return ship.radioDev.hp; }, set hp(v) { ship.radioDev.hp = v; },
       get hpMax() { return ship.radioDev.hpMax; },
@@ -187,7 +185,7 @@
       get destroyed() { return ship.radioDestroyed; }
     });
     ship.devList.push({
-      kind: 'iff', group: 'superstructure', obj: ship.iffDev,
+      kind: 'iff', group: 'comms', obj: ship.iffDev,
       name: '敌我识别器', short: '识别器',
       get hp() { return ship.iffDev.hp; }, set hp(v) { ship.iffDev.hp = v; },
       get hpMax() { return ship.iffDev.hpMax; },
@@ -220,6 +218,17 @@
     return out;
   }
 
+  /** 某个结构区底下挂着哪些设备 */
+  function zoneDevices(ship, zoneKey) {
+    if (!ship.devList) return [];
+    if (zoneKey === 'power') return powerDevices(ship);
+    var out = [];
+    for (var i = 0; i < ship.devList.length; i++) {
+      if (ship.devList[i].group === zoneKey) out.push(ship.devList[i]);
+    }
+    return out;
+  }
+
   function superDevices(ship) {
     return ship.devList || [];
   }
@@ -231,6 +240,40 @@
     if (ship.rudder) out.push(ship.rudder);
     if (ship.electrical) out.push(ship.electrical);
     return out;
+  }
+
+  /** 一组设备的血量占比（0..1），血条显示用 */
+  function groupFrac(list) {
+    var hp = 0, max = 0;
+    for (var i = 0; i < list.length; i++) { hp += Math.max(0, list[i].hp); max += list[i].hpMax; }
+    return max > 0 ? U.clamp01(hp / max) : 1;
+  }
+
+  /** 发动机整体的血量占比 */
+  function engineFrac(ship) {
+    return groupFrac(ship.engines || []);
+  }
+
+  /**
+   * 三大系统：船体结构 / 上层结构 / 动力系统。
+   * 上层结构 = 武器 + 通讯 + 其他上层结构 三块之和；
+   * 动力系统 = 发动机 + 舵机 + 电力 三块之和。
+   */
+  function systems(ship) {
+    var w = ship.zoneMax.weapons, c = ship.zoneMax.comms, s = ship.zoneMax.superstructure;
+    var upperMax = w + c + s;
+    var upperHp = ship.zone.weapons + ship.zone.comms + ship.zone.superstructure;
+    return {
+      hull: ship.hullMax > 0 ? U.clamp01(ship.hull / ship.hullMax) : 1,
+      upper: upperMax > 0 ? U.clamp01(upperHp / upperMax) : 1,
+      weapons: ship.zoneFrac('weapons'),
+      comms: ship.zoneFrac('comms'),
+      other: ship.zoneFrac('superstructure'),
+      power: ship.zoneFrac('power'),
+      engines: engineFrac(ship),
+      rudder: ship.rudder ? U.clamp01(ship.rudder.hp / ship.rudder.hpMax) : 1,
+      elec: ship.electrical ? U.clamp01(ship.electrical.hp / ship.electrical.hpMax) : 1
+    };
   }
 
   /* ====================================================================== */
@@ -259,36 +302,83 @@
 
   /**
    * 结构区挨打时，把伤害也分到具体设备上。
-   * 按剩余血量加权随机挑一台 —— 所以可能先掉炮塔，也可能先掉雷达，
-   * 但总量和原来的"结构区血条"完全一致，不会凭空变强或变弱。
+   * 每个结构区只管自己挂着的设备：武器区 → 炮塔和鱼雷管，通讯区 → 雷达 / 电台 / 识别器，
+   * 动力区 → 主机 / 舵机 / 电力。按剩余血量加权随机挑一台 —— 可能先掉 A 炮塔，
+   * 也可能先掉 B 炮塔，但总量和原来的"结构区血条"完全一致。
    */
   function routeDamage(ship, zoneKey, amount, world, route) {
     if (!(amount > 0) || !ship.devList) return;
-    var list = zoneKey === 'power' ? powerDevices(ship) : superDevices(ship);
+    var list = zoneDevices(ship, zoneKey);
     var pool = [], total = 0, i;
     for (i = 0; i < list.length; i++) {
       var d = list[i];
       if (d.destroyed) continue;
       if (d.hp <= 0) continue;
       // 指定只打某一类设备（例如搁浅只伤螺旋桨和轴系）
-      if (route === 'engine' && !ship.engines) continue;
-      if (route === 'engine' && ship.engines.indexOf(d) < 0) continue;
+      if (route === 'engine' && ship.engines && ship.engines.indexOf(d) < 0) continue;
       pool.push(d);
       total += d.hp;
     }
     if (!pool.length || total <= 0) return;
 
-    var r = (world && world.rng ? world.rng.next() : Math.random()) * total;
-    var pick = pool[pool.length - 1];
-    for (i = 0; i < pool.length; i++) {
-      r -= pool[i].hp;
-      if (r <= 0) { pick = pool[i]; break; }
+    /* 武器和通讯是"一大片设备"：一发炮弹扫过去是整片结构一起受损，
+       所以按血量比例摊到每台设备上 —— 炮塔一台台慢慢打坏，而不是一发就没。
+       动力区反过来：机舱里挨一发，就是某一台主机倒霉。 */
+    if (zoneKey === 'weapons' || zoneKey === 'comms') {
+      var drain = Math.min(amount, total);
+      for (i = 0; i < pool.length; i++) {
+        var dv2 = pool[i];
+        dv2.hp = Math.max(0, dv2.hp - drain * (dv2.hp / total));
+      }
+      for (i = 0; i < pool.length; i++) {
+        var dv3 = pool[i];
+        if (dv3.hp <= 0.0001 && !dv3.destroyed) {
+          dv3.hp = 0;
+          if (dv3.kind) destroyDevice(ship, dv3, world);
+          else dv3.destroyed = true;
+        }
+      }
+      syncZone(ship, zoneKey);
+      return;
     }
-    pick.hp = Math.max(0, pick.hp - amount);
-    if (pick.hp <= 0 && !pick.destroyed) {
-      if (pick.kind) destroyDevice(ship, pick, world);
-      else pick.destroyed = true;
+
+    // 一发炮弹打穿一台设备时，多出来的伤害要顺延到下一台，
+    // 否则结构区掉的血比设备掉的血多，两边账目就对不上了
+    var remain = amount;
+    while (remain > 0 && pool.length) {
+      var r = (world && world.rng ? world.rng.next() : Math.random()) * total;
+      var idx = pool.length - 1;
+      for (i = 0; i < pool.length; i++) {
+        r -= pool[i].hp;
+        if (r <= 0) { idx = i; break; }
+      }
+      var pick = pool[idx];
+      var take = Math.min(remain, pick.hp);
+      pick.hp -= take;
+      remain -= take;
+      total -= take;
+      if (pick.hp <= 0.0001) {
+        pick.hp = 0;
+        if (!pick.destroyed) {
+          if (pick.kind) destroyDevice(ship, pick, world);
+          else pick.destroyed = true;
+        }
+        pool.splice(idx, 1);
+      }
     }
+
+    syncZone(ship, zoneKey);
+  }
+
+  /** 设备血量变了以后，把它所属的结构区血条拉回来对齐 */
+  function syncZone(ship, zoneKey) {
+    if (!ship.zone || ship.zone[zoneKey] == null) return;
+    var list = zoneDevices(ship, zoneKey);
+    if (!list.length) return;
+    var sum = 0;
+    for (var i = 0; i < list.length; i++) sum += Math.max(0, list[i].hp);
+    ship.zone[zoneKey] = Math.min(ship.zoneMax[zoneKey], sum);
+    if (zoneKey === 'power') ship.power = 100 * propulsion(ship);
   }
 
   /* ====================================================================== */
@@ -545,21 +635,21 @@
 
   /** 结构区被打光时的连带后果 */
   function onZoneLost(ship, k, world) {
-    var i;
     if (k === 'weapons') {
       ship.mounts.forEach(function (m) { m.hp = 0; m.disabled = true; m.ready = false; m.destroyed = true; });
       ship.torps.forEach(function (t) { t.hp = 0; t.disabled = true; t.destroyed = true; });
     } else if (k === 'comms') {
       ship.radioDestroyed = true;
       ship.iffDestroyed = true;
+      ship.radarDestroyed = true;
       if (ship.radioDev) ship.radioDev.hp = 0;
       if (ship.iffDev) ship.iffDev.hp = 0;
+      if (ship.radarDev) ship.radarDev.hp = 0;
     } else if (k === 'superstructure') {
-      for (i = 0; i < ship.devList.length; i++) {
-        var d = ship.devList[i];
-        d.hp = 0;
-        if (!d.destroyed && d.kind) destroyDevice(ship, d, null);
-      }
+      // 上层结构（船楼、桅杆、烟囱）塌了：雷达天线和火控指挥仪一起没了
+      ship.radarDestroyed = true;
+      ship.fcDestroyed = true;
+      if (ship.radarDev && ship.killDevice) ship.killDevice(ship.radarDev, 'comms', world);
     } else if (k === 'power') {
       ship.power = 0;
       if (ship.engines) ship.engines.forEach(function (e) { e.hp = 0; e.destroyed = true; });
@@ -626,6 +716,7 @@
     init: init,
     update: update,
     routeDamage: routeDamage,
+  syncZone: syncZone,
     onZoneLost: onZoneLost,
     propulsion: propulsion,
     turnFactor: turnFactor,
@@ -644,6 +735,10 @@
     destroyedList: destroyedList,
     summary: summary,
     powerDevices: powerDevices,
+    zoneDevices: zoneDevices,
+    groupFrac: groupFrac,
+    engineFrac: engineFrac,
+    systems: systems,
     isFullSpeed: isFullSpeed,
     isFiring: isFiring,
     P: P,
