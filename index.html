@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>铁底湾 1942 · 所罗门海战</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<canvas id="sea"></canvas>
+
+<!-- ============================ 标题画面 ============================ -->
+<div id="titleScreen" class="title-screen">
+  <div class="ts-glow"></div>
+  <div class="ts-inner">
+    <div class="ts-kicker">所罗门群岛 · 1942 — 1943</div>
+    <h1 class="ts-title">铁底湾</h1>
+    <div class="ts-latin">IRONBOTTOM SOUND</div>
+    <p class="ts-lead">你是指挥官。<br>你看不到敌舰，只能看到报告 —— 过时的、残缺的、可能是错的报告。</p>
+
+    <div class="ts-menu">
+      <button class="ts-btn ts-primary" id="tsCampaign">
+        <b>历史战役</b><span id="tsCampaignSub">16 场真实海战 · 按时间推进</span>
+      </button>
+      <button class="ts-btn" id="tsFree">
+        <b>自由选择</b><span>按任务类型挑选任意场景</span>
+      </button>
+      <button class="ts-btn" id="tsTutorial">
+        <b>新手引导</b><span>一步步学会指挥</span>
+      </button>
+      <button class="ts-btn" id="tsHelp">
+        <b>操作说明</b><span>键位与机制</span>
+      </button>
+    </div>
+
+    <div class="ts-foot">
+      <span id="tsProgress">尚未通关任何战役</span>
+      <span class="ts-ver">纯前端 · 无外部依赖</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ 新手引导 ============================ -->
+<div id="tutCard" class="tut-card hidden">
+  <div class="tut-head">
+    <span class="tut-step" id="tutStep">1 / 7</span>
+    <span class="tut-title" id="tutTitle">—</span>
+    <button class="tut-skip" id="tutSkip" title="退出引导">跳过</button>
+  </div>
+  <div class="tut-body" id="tutBody"></div>
+  <div class="tut-wait" id="tutWait"></div>
+  <div class="tut-foot">
+    <div class="tut-dots" id="tutDots"></div>
+    <button class="tut-next" id="tutNext">下一步</button>
+  </div>
+</div>
+
+
+<!-- ============================ 顶栏 ============================ -->
+<header id="topbar">
+  <div class="tb-left">
+    <div class="mission-title" id="missionTitle">铁底湾 · 白昼水面炮战</div>
+    <div class="mission-sub" id="missionSub">TF 64.2 · 1942-11-15 · 所罗门群岛</div>
+  </div>
+
+  <div class="tb-center">
+    <button class="tbtn pause" id="btnPause" data-scale="0" title="暂停 / 继续 (空格)">❚❚ 暂停</button>
+    <button class="tbtn active" data-scale="1">1×</button>
+    <button class="tbtn" data-scale="2">2×</button>
+    <button class="tbtn" data-scale="5">5×</button>
+    <button class="tbtn" data-scale="10">10×</button>
+    <div class="clock" id="clock">08:20:00</div>
+  </div>
+
+  <div class="tb-right">
+    <div class="env-chip pos-chip" id="posRead" title="视野中心的位置">—</div>
+    <div class="env-chip" id="envVis">能见度 22.0 km</div>
+    <div class="env-chip" id="envWind">风 120° / 12 kn</div>
+    <button class="tbtn ghost" id="btnFit" title="全览 (Q)">全览</button>
+    <button class="tbtn ghost" id="btnReplay" title="战斗回放 (R)">回放</button>
+    <button class="tbtn ghost" id="btnHelp">?</button>
+    <button class="tbtn ghost" id="btnBrief">简报</button>
+    <button class="tbtn ghost exit" id="btnMenu" title="暂停菜单 (Esc)">菜单</button>
+  </div>
+</header>
+
+<!-- ============================ 左：编队 ============================ -->
+<aside id="roster">
+  <div class="panel-head">
+    <span>我方编队</span>
+    <span class="panel-sub" id="rosterCount">6 艘</span>
+  </div>
+  <div id="rosterList" class="roster-list"></div>
+
+  <!-- 拖动这条分隔线，调整上面「舰艇列表」与下面「小队列表」的高度比例 -->
+  <div class="splitter" id="splitter" title="上下拖动，调整舰艇列表 / 小队列表的高度（双击恢复默认）"></div>
+
+  <!-- 小队 / 战列线 -->
+  <div class="squad-box" id="squadBox">
+    <div class="panel-head sq-head">
+      <span>小队 / 战列线</span>
+      <span class="panel-sub" id="squadCount">0</span>
+    </div>
+    <div id="squadList" class="squad-list">
+      <div class="sq-empty">Shift+点击选中多艘舰，按 <kbd>G</kbd> 编成小队</div>
+    </div>
+    <div class="sq-row">
+      <span class="sq-lab" title="线数：把小队拆成几条并排的纵队">线</span>
+      <button class="sq-b on" data-lines="1" title="单纵队：所有舰排成一列">1</button>
+      <button class="sq-b" data-lines="2" title="双纵队：拆成两条并排的纵队">2</button>
+      <button class="sq-b" data-lines="3" title="三纵队：拆成三条并排的纵队">3</button>
+      <span class="sq-lab" title="转向方式">转</span>
+      <button class="sq-b on" data-turn="line" title="依次转向：后舰沿前舰航迹跟转，走同一个弯">依次</button>
+      <button class="sq-b" data-turn="together" title="同转：全队同时转同一个角度，纵队会拉开成横队">同转</button>
+    </div>
+    <div class="sq-row">
+      <span class="sq-lab" title="战列线间距">距</span>
+      <button class="sq-b" data-sp="tight" title="间距：紧">紧</button>
+      <button class="sq-b on" data-sp="normal" title="间距：中">中</button>
+      <button class="sq-b" data-sp="wide" title="间距：宽">宽</button>
+      <span class="sq-lab" title="右键命令">键</span>
+      <button class="sq-b on" data-mode="move" title="右键：给航路点，整条线沿航线开过去">移动</button>
+      <button class="sq-b" data-mode="course" title="右键：只改航向，不设终点">方向</button>
+    </div>
+    <button class="wide-btn" id="btnSquad">编队 / 解散 <kbd>G</kbd></button>
+    <div class="sq-hint" title="Shift+右键 追加航路点 · H 换转向 · J 换右键模式 · K 原地待命">Shift+右键 追加航路点 · <kbd>H</kbd><kbd>J</kbd><kbd>K</kbd></div>
+  </div>
+
+  <!-- 指挥舰 / 无线电链路 -->
+  <div class="cmd-box" id="cmdBox">
+    <div class="panel-head cmd-head">
+      <span>指挥舰</span>
+      <span class="panel-sub" id="cmdFlag">—</span>
+    </div>
+    <div class="cmd-row"><span class="cmd-lab">链路</span><span id="cmdLink">—</span></div>
+    <div class="cmd-row"><span class="cmd-lab">电台</span><span id="cmdRadio">—</span></div>
+    <div class="cmd-row"><span class="cmd-lab">识别</span><span id="cmdIff">—</span></div>
+    <div class="cmd-bar"><i id="cmdLossBar" style="width:0%"></i></div>
+  </div>
+
+  <div class="roster-foot">
+    <div class="stat-row"><span>编队战力</span><span id="forcePower">100%</span></div>
+    <div class="power-bar"><i id="forcePowerBar" style="width:100%"></i></div>
+    <div class="obj-head"><span>任务目标</span></div>
+    <div id="objectiveList" class="objective-list"></div>
+  </div>
+</aside>
+
+<!-- ============================ 右：详情 ============================ -->
+<aside id="details">
+  <div id="detailEmpty" class="detail-empty">
+    <div class="de-icon">⌖</div>
+    <p>点击海图上的己方舰艇<br>或左侧编队列表选择</p>
+    <div class="hint-list">
+      <div><kbd>右键</kbd> 海图设置航向</div>
+      <div><kbd>Shift+点击</kbd> 多选 · <kbd>G</kbd> 编成小队</div>
+      <div><kbd>H</kbd> 线转 / 同转 · <kbd>J</kbd> 右键切换移动/方向</div>
+      <div><kbd>F</kbd> 对选定目标开火</div>
+      <div><kbd>T</kbd> 鱼雷齐射</div>
+      <div><kbd>S</kbd> 烟幕 · <kbd>L</kbd> 照明弹</div>
+      <div><kbd>R</kbd> 回放 · <kbd>Q</kbd> 全览</div>
+      <div><kbd>空格</kbd> 暂停 · <kbd>1-4</kbd> 时间倍率</div>
+      <div><kbd>Esc</kbd> 暂停菜单（可换任务 / 退出）</div>
+    </div>
+  </div>
+
+  <div id="detailBody" class="detail-body hidden">
+    <div class="d-head">
+      <div>
+        <div class="d-name" id="dName">—</div>
+        <div class="d-class" id="dClass">—</div>
+      </div>
+      <div class="d-close" id="dClose">×</div>
+    </div>
+
+    <div class="d-section">
+      <div class="d-label">舰体状态</div>
+      <div class="bar-row"><span>结构</span><div class="bar"><i id="barHull"></i></div><b id="txtHull">100</b></div>
+      <div class="bar-row"><span>进水</span><div class="bar flood"><i id="barFlood"></i></div><b id="txtFlood">0</b></div>
+      <div class="bar-row"><span>火灾</span><div class="bar fire"><i id="barFire"></i></div><b id="txtFire">0</b></div>
+      <div class="d-status" id="dStatus">完好</div>
+    </div>
+
+    <div class="d-section">
+      <div class="d-label">结构分区</div>
+      <div class="bar-row"><span>动力</span><div class="bar zone"><i id="barZonePower"></i></div><b id="txtZonePower">100</b></div>
+      <div class="bar-row"><span>武器</span><div class="bar zone"><i id="barZoneWeapons"></i></div><b id="txtZoneWeapons">100</b></div>
+      <div class="bar-row"><span>上层</span><div class="bar zone"><i id="barZoneSuper"></i></div><b id="txtZoneSuper">100</b></div>
+      <div class="bar-row"><span>通信</span><div class="bar zone"><i id="barZoneComms"></i></div><b id="txtZoneComms">100</b></div>
+    </div>
+
+    <div class="d-section">
+      <div class="d-label">航向与航速</div>
+      <div class="d-dial-row">
+        <canvas id="hdgDial" width="132" height="132"></canvas>
+        <div class="d-dial-info">
+          <div class="d-kv"><span>罗经航向</span><b id="dHeading">330°</b></div>
+          <div class="d-kv"><span>指令</span><b id="dOrder">—</b></div>
+          <div class="d-kv"><span>舷角</span><b id="dRelBrg">—</b></div>
+          <div class="d-kv"><span>实际航速</span><b id="dSpeed">18.0 kn</b></div>
+        </div>
+      </div>
+      <div class="speed-btns" id="speedBtns">
+        <button data-spd="0">停</button>
+        <button data-spd="0.25">1/4</button>
+        <button data-spd="0.5">1/2</button>
+        <button data-spd="0.75">3/4</button>
+        <button data-spd="1">全速</button>
+      </div>
+    </div>
+
+    <div class="d-section">
+      <div class="d-label">火控</div>
+      <div class="d-kv"><span>目标</span><b id="dTarget">未指定</b></div>
+      <div class="d-kv"><span>距离</span><b id="dRange">—</b></div>
+      <div class="d-kv"><span>舷角</span><b id="dTargetBrg">—</b></div>
+      <div class="d-kv"><span>射击</span><b id="dFire">停火</b></div>
+      <div class="d-kv"><span>校射</span><b id="dSpot">—</b></div>
+      <div class="d-kv"><span>岸轰</span><b id="dBombard">—</b></div>
+      <div class="d-kv"><span>照明弹</span><b id="dStarshell">—</b></div>
+      <button class="wide-btn" id="btnEngage">开火 / 停火 <kbd>F</kbd></button>
+    </div>
+
+    <div class="d-section">
+      <div class="d-label">主炮</div>
+      <div id="mountList" class="mount-list"></div>
+    </div>
+
+    <div class="d-section" id="torpSection">
+      <div class="d-label">鱼雷</div>
+      <div id="torpList" class="mount-list"></div>
+      <button class="wide-btn danger" id="btnTorp">鱼雷齐射 <kbd>T</kbd></button>
+      <div class="d-note" id="torpNote"></div>
+    </div>
+
+    <div class="d-section d-actions">
+      <button class="wide-btn" id="btnSmoke">施放烟幕 <kbd>S</kbd></button>
+      <button class="wide-btn" id="btnStarshell">照明弹 <kbd>L</kbd></button>
+    </div>
+  </div>
+</aside>
+
+<!-- ============================ 底：战报 + 接触 ============================ -->
+<footer id="bottom">
+  <div class="log-wrap">
+    <div class="panel-head"><span>战报 / 接触报告</span><span class="panel-sub" id="logCount"></span></div>
+    <div id="log" class="log"></div>
+  </div>
+  <div class="contact-wrap">
+    <div class="panel-head"><span>接触目标</span><span class="panel-sub" id="contactCount">0</span></div>
+    <div id="contacts" class="contacts"></div>
+  </div>
+</footer>
+
+<!-- ============================ 回放控制条 ============================ -->
+<div id="replayBar" class="replay-bar hidden">
+  <div class="rb-tag">战斗回放</div>
+  <button class="rb-btn" id="rbPlay" title="播放/暂停 (空格)">❚❚</button>
+  <div class="rb-track">
+    <div class="rb-marks" id="rbMarks"></div>
+    <input type="range" id="rbSeek" min="0" max="100" value="0" step="0.1">
+  </div>
+  <div class="rb-clock" id="rbClock">00:00 / 00:00</div>
+  <div class="rb-sides" id="rbSides"></div>
+  <div class="rb-speed">
+    <button data-rspd="1">1×</button>
+    <button data-rspd="2" class="active">2×</button>
+    <button data-rspd="4">4×</button>
+  </div>
+  <button class="rb-btn" id="rbFollow" title="镜头自动跟随双方编队">跟随</button>
+  <button class="rb-btn exit" id="rbExit" title="退出回放 (Esc)">退出回放</button>
+</div>
+
+<!-- ============================ 提示条 ============================ -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- ============================ 遮罩 ============================ -->
+<div id="overlay" class="overlay hidden">
+  <div class="modal" id="modal">
+    <div class="modal-tag" id="modalTag">任务简报</div>
+    <h1 id="modalTitle">铁底湾 · 白昼水面炮战</h1>
+    <div class="modal-sub" id="modalSub"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<!-- ============================ 脚本 ============================ -->
+<script src="js/core.js"></script>
+<script src="js/data/ships.js"></script>
+<script src="js/data/scenarios.js"></script>
+<script src="js/data/campaign.js"></script>
+<script src="js/sim/sensors.js"></script>
+<script src="js/sim/ship.js"></script>
+<script src="js/sim/combat.js"></script>
+<script src="js/sim/ai.js"></script>
+<script src="js/sim/squad.js"></script>
+  <script src="js/sim/command.js"></script>
+<script src="js/sim/recorder.js"></script>
+<script src="js/sim/world.js"></script>
+<script src="js/view/renderer.js"></script>
+<script src="js/view/hud.js"></script>
+<script src="js/view/screens.js"></script>
+<script src="js/view/tutorial.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
