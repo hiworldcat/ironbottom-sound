@@ -537,7 +537,26 @@ kbd {
 .mount-row .m-ammo { color: var(--dim2); }
 .mount-row.ready .m-state { color: var(--green); }
 .mount-row.reloading .m-state { color: var(--amber); }
+.mount-row.fault .m-state { color: var(--amber); }
+.mount-row.fault { background: rgba(120, 82, 20, 0.16); }
 .mount-row.disabled { opacity: 0.35; text-decoration: line-through; }
+
+/* 设备与损管面板 */
+.dev-list { display: flex; flex-direction: column; gap: 2px; }
+
+.dev-row {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px;
+  padding: 2px 5px; background: rgba(255, 255, 255, 0.022);
+}
+
+.dev-row .dev-k { width: 40px; color: var(--dim2); flex: none; }
+.dev-row .dev-v { flex: 1; color: var(--text); }
+.dev-row .dev-v.ok { color: var(--green); }
+.dev-row .dev-v.warn { color: var(--amber); }
+.dev-row .dev-v.bad { color: var(--red); }
+
+.dev-note { font-size: 10px; color: var(--dim2); margin-top: 5px; }
 
 .d-note { font-size: 10px; color: var(--dim2); margin-top: 6px; line-height: 1.6; }
 

@@ -423,7 +423,7 @@
       if (range < trng && rel > 35 && rel < 145) {
         for (var ti = 0; ti < ship.torps.length; ti++) {
           var mount = ship.torps[ti];
-          if (mount.disabled || mount.loaded <= 0) continue;
+          if (mount.disabled || mount.destroyed || mount.fault || mount.loaded <= 0) continue;
           var n = Math.min(mount.loaded, 4);
           var fired = N.Combat.launchTorpedoes(world, ship, mount, track.pos, track.course, track.speed, n, doc.torpSpread);
           if (fired > 0) {

@@ -218,7 +218,7 @@ const ctxObj = vm.createContext(sandbox);
 /* ------------------------------------------------------------ 加载脚本 */
 const files = [
   'js/core.js', 'js/data/ships.js', 'js/data/scenarios.js', 'js/data/campaign.js',
-  'js/sim/weather.js', 'js/sim/sensors.js', 'js/sim/ship.js', 'js/sim/combat.js', 'js/sim/ai.js', 'js/sim/squad.js', 'js/sim/command.js',
+  'js/sim/weather.js', 'js/sim/damage.js', 'js/sim/sensors.js', 'js/sim/ship.js', 'js/sim/combat.js', 'js/sim/ai.js', 'js/sim/squad.js', 'js/sim/command.js',
   'js/sim/recorder.js', 'js/sim/world.js',
   'js/view/renderer.js', 'js/view/hud.js', 'js/view/screens.js', 'js/view/tutorial.js', 'js/main.js'
 ];

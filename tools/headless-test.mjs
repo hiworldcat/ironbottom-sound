@@ -10,7 +10,7 @@ const files = [
   'js/core.js',
   'js/data/ships.js',
   'js/data/scenarios.js',
-  'js/sim/weather.js', 'js/sim/sensors.js',
+  'js/sim/weather.js', 'js/sim/damage.js', 'js/sim/sensors.js',
   'js/sim/ship.js',
   'js/sim/combat.js',
   'js/sim/ai.js',
@@ -58,7 +58,8 @@ function run(scenarioId, label, opts) {
     steps++;
     if (steps % 5 === 0) {
       for (const s of world.ships) {
-        if (s.sunk) continue;
+        // 已经在沉没的舰不算：沉船漂到哪片礁盘上不叫"航行压陆地"
+        if (s.sunk || s.sinking) continue;
         if (world.isLand(s.pos.x, s.pos.y)) {
           const k = s.side + ' ' + s.name;
           aground[k] = (aground[k] || 0) + 1;
@@ -1117,6 +1118,145 @@ function testWeather() {
     `夜视 新月 ${(dark / 1000).toFixed(1)} / 满月 ${(bright / 1000).toFixed(1)} km`);
 }
 
+/* ==========================================================================
+ *  设备级损害与损管自检
+ * ========================================================================== */
+function testDamage() {
+  if (!N.Damage) { problems.push('设备自检: 没有 N.Damage'); return; }
+  const D = N.Damage;
+  const w = new N.World(N.Scenarios.get('savo_melee'), { seed: 123 });
+  const s = w.ships.find(x => x.side === 'US' && x.cls.type === 'CA');
+  if (!s) { problems.push('设备自检: 找不到测试巡洋舰'); return; }
+
+  /* 1) 设备表齐全，血条加起来正好等于结构区 */
+  if (!s.engines || !s.engines.length) problems.push('设备自检: 没有主机');
+  if (!s.rudder) problems.push('设备自检: 没有舵机');
+  if (!s.electrical) problems.push('设备自检: 没有电力系统');
+  const sumSuper = s.devList.reduce((a, d) => a + d.hpMax, 0);
+  if (Math.abs(sumSuper - s.zoneMax.superstructure) > 0.01) {
+    problems.push(`设备自检: 上层设备血条合计 ${sumSuper.toFixed(2)}，` +
+      `上层结构区是 ${s.zoneMax.superstructure.toFixed(2)}`);
+  }
+  const sumPower = D.powerDevices(s).reduce((a, d) => a + d.hpMax, 0);
+  if (Math.abs(sumPower - s.zoneMax.power) > 0.01) {
+    problems.push(`设备自检: 动力设备血条合计 ${sumPower.toFixed(2)}，` +
+      `动力结构区是 ${s.zoneMax.power.toFixed(2)}`);
+  }
+
+  /* 2) 主机血量 → 动力损失档位（25% / 50% / 90%） */
+  const setAllEng = (frac) => {
+    s.engines.forEach(e => {
+      e.hp = e.hpMax * frac; e.faulted = false; e.faultLoss = 0; e.destroyed = frac <= 0;
+    });
+  };
+  const cases = [[1.0, 1.0], [0.9, 0.75], [0.7, 0.5], [0.4, 0.1], [0.0, 0.0]];
+  for (const [frac, want] of cases) {
+    setAllEng(frac);
+    const got = D.propulsion(s);
+    if (Math.abs(got - want) > 0.002) {
+      problems.push(`设备自检: 主机血量 ${Math.round(frac * 100)}% 时推进 ${got.toFixed(2)}，应为 ${want}`);
+    }
+  }
+
+  /* 3) 故障掉的动力与损坏叠加 */
+  setAllEng(1.0);
+  s.engines[0].faultLoss = 50;
+  const mixed = D.propulsion(s);
+  const wantMixed = (1 + 1 + 1 + 0.5) / s.engines.length;
+  if (Math.abs(mixed - wantMixed) > 0.002) {
+    problems.push(`设备自检: 一台主机故障 50% 后推进 ${mixed.toFixed(3)}，应为 ${wantMixed.toFixed(3)}`);
+  }
+  s.engines[0].faultLoss = 0;
+
+  /* 4) 舵机：损坏 ×2/×3/×5，故障再 ×2 */
+  s.rudder.faulted = false;
+  const rudderCases = [[1.0, 1], [0.9, 2], [0.7, 3], [0.4, 5]];
+  for (const [frac, want] of rudderCases) {
+    s.rudder.hp = s.rudder.hpMax * frac;
+    const got = D.turnFactor(s);
+    if (got !== want) problems.push(`设备自检: 舵机血量 ${Math.round(frac * 100)}% 时转向倍数 ${got}，应为 ${want}`);
+  }
+  s.rudder.hp = s.rudder.hpMax;
+  s.rudder.faulted = true;
+  if (D.turnFactor(s) !== 2) problems.push('设备自检: 舵机故障没有让转向变慢一倍');
+  s.rudder.faulted = false;
+
+  /* 5) 电力系统失灵的五条后果 */
+  s.electrical.faulted = false;
+  if (D.elecFailed(s)) problems.push('设备自检: 电力系统正常时判定失灵');
+  s.electrical.faulted = true;
+  if (!D.elecFailed(s)) problems.push('设备自检: 电力系统故障没判定为失灵');
+  if (D.radarOk(s)) problems.push('设备自检: 电力失灵了雷达还能用');
+  if (D.radioOk(s)) problems.push('设备自检: 电力失灵了电台还能用');
+  if (D.iffOk(s)) problems.push('设备自检: 电力失灵了识别器还能用');
+  if (Math.abs(D.gunRate(s) - 1 / 1.5) > 1e-6) problems.push('设备自检: 电力失灵炮击间隔不是 ×1.5');
+  if (Math.abs(D.torpRate(s) - 0.5) > 1e-6) problems.push('设备自检: 电力失灵鱼雷装填不是 ×2');
+  if (D.radioDelayBonus(s) !== 60) problems.push('设备自检: 电力失灵无线电延迟不是 +60 秒');
+  if (Math.abs(D.iffError(s) - 0.02) > 1e-6) problems.push('设备自检: 电力失灵识别错误率不是 +1%');
+  s.electrical.faulted = false;
+
+  /* 6) 动力系统低于 25% → 电力系统连带失灵 */
+  const powerSave = s.zone.power;
+  s.zone.power = s.zoneMax.power * 0.2;
+  if (!D.elecFailed(s)) problems.push('设备自检: 动力不足 25% 时电力系统没有失灵');
+  s.zone.power = powerSave;
+
+  /* 7) 损管：每 10 分钟给船体和上层回 5%，不动武器/通信/动力 */
+  s.hull = s.hullMax * 0.5;
+  s.zone.superstructure = s.zoneMax.superstructure * 0.5;
+  const hull0 = s.hull, super0 = s.zone.superstructure;
+  const weap0 = s.zone.weapons, pow0 = s.zone.power;
+  s.lastFireTime = -9999;
+  s.speed = 0; s.orderedSpeed = 0;
+  s._faultT = -600;          // 压住故障判定，只看损管
+  s._healT = 0;
+  D.update(s, 600, w);
+  const dh = s.hull - hull0, ds = s.zone.superstructure - super0;
+  if (Math.abs(dh - s.hullMax * 0.05) > 0.05) {
+    problems.push(`设备自检: 损管 10 分钟给船体回了 ${dh.toFixed(2)}，应为 ${(s.hullMax * 0.05).toFixed(2)}`);
+  }
+  if (Math.abs(ds - s.zoneMax.superstructure * 0.05) > 0.05) {
+    problems.push(`设备自检: 损管 10 分钟给上层回了 ${ds.toFixed(2)}，` +
+      `应为 ${(s.zoneMax.superstructure * 0.05).toFixed(2)}`);
+  }
+  if (s.zone.weapons > weap0 || s.zone.power > pow0) problems.push('设备自检: 损管修了不该修的地方');
+
+  /* 8) 打坏的设备修不好（不可逆） */
+  const m0 = s.mounts[0];
+  m0.disabled = true; m0.destroyed = true; m0.hp = 0; m0.fault = false;
+  for (let i = 0; i < 400; i++) {
+    s._faultT = 299.9; s._healT = -1e9;
+    D.update(s, 0.2, w);
+  }
+  if (!m0.disabled || m0.hp > 0) problems.push('设备自检: 被打毁的炮塔被损管修好了');
+
+  /* 9) 故障率：平时 1%，开火时 3% */
+  const g = new N.World(N.Scenarios.get('savo_melee'), { seed: 9 });
+  const t = g.ships.find(x => x.side === 'US' && x.cls.type === 'CA');
+  const rateOf = (firing) => {
+    let hits = 0, trials = 0;
+    for (let i = 0; i < 1200; i++) {
+      t.devList.forEach(d => { d.fault = false; });
+      t.engines.forEach(e => { e.faulted = false; e.faultLoss = 0; });
+      t.rudder.faulted = false; t.electrical.faulted = false;
+      t.speed = 0; t.orderedSpeed = 0;
+      t.lastFireTime = firing ? g.time : -9999;
+      t._faultT = 299.9; t._healT = -1e9;
+      D.update(t, 0.2, g);
+      hits += t.devList.filter(d => d.fault).length;
+      trials += t.devList.length;
+    }
+    return hits / trials;
+  };
+  const idle = rateOf(false), hot = rateOf(true);
+  if (idle < 0.006 || idle > 0.014) problems.push(`设备自检: 平时故障率 ${(idle * 100).toFixed(2)}%，应在 1% 上下`);
+  if (hot < idle + 0.012) problems.push(`设备自检: 开火时故障率 ${(hot * 100).toFixed(2)}%，` +
+    `应比平时的 ${(idle * 100).toFixed(2)}% 高 2 个点`);
+
+  console.log(`设备自检: 上层 ${s.devList.length} 台设备 / 动力 ${D.powerDevices(s).length} 台，` +
+    `故障率 平时 ${(idle * 100).toFixed(2)}% · 开火 ${(hot * 100).toFixed(2)}%`);
+}
+
 testSquad();
 testSquadNumbering();testFormationShape();
 testFormationEdit();
@@ -1129,6 +1269,7 @@ testTorpedoTrigger();
 testGrounding();
 testCollision();
 testWeather();
+testDamage();
 
 const ids = only ? [only] : N.Scenarios.available().map(s => s.id);
 const results = [];

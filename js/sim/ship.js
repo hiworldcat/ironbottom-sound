@@ -164,6 +164,10 @@
     this.torpRangeMax = this.torps.length ? this.torps[0].torp.range : 0;
     this.torpSpeed = this.torps.length ? this.torps[0].torp.speed : 0;
 
+    /* ---- 设备级损害（damage.js）：炮塔 / 鱼雷管 / 雷达 / 电台 / 识别器 /
+            发动机 / 舵机 / 电力系统，各自的血条与故障状态 ---- */
+    if (N.Damage) N.Damage.init(this, world);
+
     /* ---- 统计 ---- */
     this.hitsTaken = 0;
     this.hitsDealt = 0;
@@ -180,11 +184,16 @@
       if (dmg.floodRate) this.floodRate = dmg.floodRate;
       if (dmg.fire) this.fire = dmg.fire;
       if (dmg.power) this.setPowerPct(100 - dmg.power);
-      if (dmg.steering) this.steering = Math.max(0, 100 - dmg.steering);
+      if (dmg.steering) {
+        var stPct = Math.max(0, 100 - dmg.steering);
+        this.steering = stPct;
+        if (N.Damage) N.Damage.setSteering(this, stPct);
+      }
       if (dmg.zones) {
         for (var zk in dmg.zones) {
           if (this.zone[zk] != null) this.zone[zk] = this.zoneMax[zk] * U.clamp01(dmg.zones[zk]);
         }
+        if (dmg.zones.power != null) this.setPowerPct(100 * U.clamp01(dmg.zones.power));
         this.syncZones(world);
       }
       this.hull = U.clamp(this.hull, 1, this.hullMax);
@@ -220,6 +229,10 @@
   /** 动力结构 → 直接写回 power 百分比（兼容老代码） */
   Ship.prototype.setPowerPct = function (pct) {
     var p = U.clamp(pct, 0, 100);
+    if (N.Damage && this.engines) {
+      N.Damage.setPowerPct(this, p);
+      return;
+    }
     if (this.zoneMax && this.zoneMax.power > 0) {
       this.zone.power = this.zoneMax.power * p / 100;
     }
@@ -230,12 +243,16 @@
    * 把某个结构区打掉若干点（单位与 hull 相同），并结算"这一块没了"的后果。
    * 返回 true 表示这一下刚好把它打光。
    */
-  Ship.prototype.hitZone = function (k, amount, world) {
+  Ship.prototype.hitZone = function (k, amount, world, route) {
     if (!this.zone || this.zone[k] == null || !(amount > 0)) return false;
     var before = this.zone[k];
     this.zone[k] = Math.max(0, before - amount);
+    // 同一笔伤害也落到具体设备上（炮塔/雷达/主机/舵机……）
+    if (N.Damage && (k === 'superstructure' || k === 'power')) {
+      N.Damage.routeDamage(this, k, amount, world, route);
+    }
     if (k === 'power') {
-      this.power = 100 * this.zoneFrac('power');
+      this.power = 100 * (N.Damage && this.engines ? N.Damage.propulsion(this) : this.zoneFrac('power'));
     }
     var wasAlive = before > 0;
     if (wasAlive && this.zone[k] <= 0 && !this.zoneLost[k]) {
@@ -248,14 +265,12 @@
 
   /** 某个结构区被打光时，对应能力成比例地丧失 */
   Ship.prototype.onZoneLost = function (k, world) {
-    var self = this;
+    if (N.Damage) N.Damage.onZoneLost(this, k, world);
     if (k === 'weapons') {
-      this.mounts.forEach(function (m) { m.disabled = true; m.ready = false; });
-      this.torps.forEach(function (t) { t.disabled = true; });
       if (world) world.log(this.side, '💀 ' + this.name + ' 的武器结构全毁，火炮鱼雷都哑了', 'critical');
     } else if (k === 'comms') {
       this.radioDestroyed = true;
-      if (!this.iffDestroyed && world && world.rng.chance(0.5)) this.iffDestroyed = true;
+      this.iffDestroyed = true;
       if (world) world.log(this.side, '📻 ' + this.name + ' 通信室被毁，无线电与敌我识别中断', 'critical');
     } else if (k === 'superstructure') {
       this.radarDestroyed = true;
@@ -271,7 +286,12 @@
   /** 把 power 百分比与 power 结构区对齐（读档 / 场景预设损伤后用） */
   Ship.prototype.syncZones = function (world) {
     if (!this.zone) return;
-    this.zone.power = this.zoneMax.power * U.clamp(this.power, 0, 100) / 100;
+    if (N.Damage && this.engines) {
+      // 动力现在是主机算出来的，不要用旧字段反推
+      this.power = 100 * N.Damage.propulsion(this);
+    } else {
+      this.zone.power = this.zoneMax.power * U.clamp(this.power, 0, 100) / 100;
+    }
     for (var k in this.zoneLost) {
       if (this.zoneLost[k]) continue;
       if (this.zone[k] <= 0) { this.zoneLost[k] = true; this.onZoneLost(k, world); }
@@ -296,7 +316,10 @@
 
   Ship.prototype.effectiveMaxSpeed = function () {
     var base = this.cls.maxSpeed;
-    var p = U.clamp(this.power / 100, 0, 1);
+    // 推进力现在来自具体的主机：血量掉的 + 故障掉的，逐台算完再平均
+    var p = N.Damage && this.engines ? N.Damage.propulsion(this)
+      : U.clamp(this.power / 100, 0, 1);
+    this.power = 100 * p;
     var floodPenalty = U.clamp(1 - this.flood / 130, 0.15, 1);
     var hullPenalty = U.clamp(0.55 + 0.45 * (this.hull / this.hullMax), 0.3, 1);
     return base * p * floodPenalty * hullPenalty;
@@ -323,9 +346,10 @@
       return;
     }
 
-    /* --- 转向 --- */
+    /* --- 转向：舵机被打坏 / 卡死，转同样的角度要多花好几倍时间 --- */
     var speedFrac = U.clamp(this.speed / Math.max(6, this.cls.maxSpeed), 0.25, 1);
-    var steerF = U.clamp(this.steering / 100, 0.2, 1);
+    var turnFactor = (N.Damage && this.rudder) ? N.Damage.turnFactor(this) : 1;
+    var steerF = 1 / Math.max(1, turnFactor);
     this.turnRateNow = this.cls.turnRate * (0.35 + 0.65 * speedFrac) * steerF;
     var maxStep = this.turnRateNow * dt;
     this.heading = U.approachAngle(this.heading, this.orderedHeading, maxStep);
@@ -357,10 +381,14 @@
 
       /* 搁浅后只能慢慢往外蹭 */
       this.speed = Math.min(this.speed, 4);
+      // 哪怕主机全毁，搁浅的舰也会被浪一点点推离礁盘 —— 否则会永远卡在岸上
+      if (this.speed < 1.2) this.speed = 1.2;
+      // 舵机打坏也得能蹭出来：搁浅时靠拖船和倒车，不按舵效算
+      var escapeTurn = Math.max(this.turnRateNow, this.cls.turnRate * 0.45);
       var wpt = world.nearestWater ? world.nearestWater(bowX, bowY, 20000) : null;
       if (wpt) {
         var escHdg = Geo.bearing({ x: bowX, y: bowY }, wpt);
-        this.heading = U.approachAngle(this.heading, escHdg, this.turnRateNow * dt * 2.5);
+        this.heading = U.approachAngle(this.heading, escHdg, escapeTurn * dt * 2.5);
         this.orderedHeading = escHdg;
         this.orderedSpeed = 4;
         var hv3 = Geo.headingVec(this.heading);
@@ -434,14 +462,17 @@
     var rel = aimPos ? this.relativeBearing(aimPos) : 0;
     var range = aimPos ? V.dist(this.pos, aimPos) : 0;
     var aiming = !!aimPos && (this.engage || !!this.bombardTargetId);
+    // 电力失灵：扬弹机、击发电路全受影响，炮击间隔 ×1.5
+    var rate = this.weaponFactor() * (N.Damage ? N.Damage.gunRate(this) : 1);
 
     for (var i = 0; i < this.mounts.length; i++) {
       var m = this.mounts[i];
-      if (m.disabled) { m.ready = false; continue; }
+      if (m.disabled || m.destroyed) { m.ready = false; continue; }
+      if (m.fault) { m.ready = false; continue; }     // 炮塔自己坏了，先修
 
       /* 装填：武器结构越破，扬弹机和装填机越慢 */
       if (!m.ready) {
-        m.reload -= dt * this.weaponFactor();
+        m.reload -= dt * rate;
         if (m.reload <= 0) { m.ready = true; m.reload = 0; }
       }
 
@@ -478,6 +509,8 @@
       hull: 0.055 * k * k,
       flood: 0.06 * k,
       floodRate: 0.0045 * k,
+      // 搁浅伤的是船底、螺旋桨和轴系：动力区的伤害直接记在主机上
+      powerRoute: 'engine',
       struct: {
         power: 0.020 * k * k,
         superstructure: 0.010 * k * k,
@@ -546,19 +579,25 @@
     if (d.struct) {
       for (zk in d.struct) {
         if (!this.zone || this.zone[zk] == null) continue;
-        this.hitZone(zk, d.struct[zk], world);
+        this.hitZone(zk, d.struct[zk], world, zk === 'power' ? d.powerRoute : null);
       }
     }
 
-    if (d.steering) this.steering = Math.max(0, this.steering - d.steering);
-    if (d.mountHit !== undefined && this.mounts[d.mountHit]) {
-      this.mounts[d.mountHit].disabled = true;
-      this.mounts[d.mountHit].ready = false;
+    if (d.steering) {
+      this.steering = Math.max(0, this.steering - d.steering);
+      if (N.Damage && this.rudder) N.Damage.setSteering(this, this.steering);
     }
-    if (d.radar) this.radarDestroyed = true;
+    if (d.mountHit !== undefined && this.mounts[d.mountHit]) {
+      var mh = this.mounts[d.mountHit];
+      mh.disabled = true;
+      mh.ready = false;
+      mh.destroyed = true;
+      mh.hp = 0;
+    }
+    if (d.radar) { this.radarDestroyed = true; if (this.radarDev) this.radarDev.hp = 0; }
     if (d.fc) this.fcDestroyed = true;
-    if (d.radio) this.radioDestroyed = true;
-    if (d.iff) this.iffDestroyed = true;
+    if (d.radio) { this.radioDestroyed = true; if (this.radioDev) this.radioDev.hp = 0; }
+    if (d.iff) { this.iffDestroyed = true; if (this.iffDev) this.iffDev.hp = 0; }
 
     this.hitsTaken++;
     this.lastDamageTime = world.time;
@@ -623,15 +662,18 @@
   /* ======================================================================= */
 
   Ship.prototype.update = function (dt, world) {
+    // 设备故障 / 修复 / 损管抢修：每 5 分钟、每 10 分钟各判一次
+    if (N.Damage) N.Damage.update(this, dt, world);
     this.updateDamage(dt, world);
     this.updateMotion(dt, world);
     this.updateMounts(dt, world);
-    // 鱼雷管装填
+    // 鱼雷管装填（电力失灵时装填间隔 ×2）
+    var tRate = this.weaponFactor() * (N.Damage ? N.Damage.torpRate(this) : 1);
     for (var i = 0; i < this.torps.length; i++) {
       var t = this.torps[i];
-      if (t.disabled) continue;
+      if (t.disabled || t.destroyed || t.fault) continue;
       if (t.loaded < t.tubes) {
-        t.reload -= dt * this.weaponFactor();
+        t.reload -= dt * tRate;
         if (t.reload <= 0) { t.loaded = t.tubes; t.reload = 0; }
       }
     }
@@ -660,7 +702,8 @@
     var parts = [];
     if (this.flood > 40) parts.push('进水' + Math.round(this.flood) + '%');
     if (this.fire > 20) parts.push('起火' + Math.round(this.fire) + '%');
-    if (this.steering < 70) parts.push('操舵受损');
+    var dev = N.Damage ? N.Damage.summary(this) : '';
+    if (dev) parts.push(dev);
     var st = this.structureText();
     if (st) parts.push(st);
     if (parts.length === 0) return this.hull < this.hullMax * 0.8 ? '轻伤' : '完好';

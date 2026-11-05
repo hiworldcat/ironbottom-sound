@@ -1,0 +1,653 @@
+/* =============================================================================
+ *  sim/damage.js —— 设备级损害与损管
+ *
+ *  一艘舰不再只是"五条血条"，而是拆成一堆**具体设备**：
+ *
+ *    上层建筑  武器   火炮 × n（每座炮塔独立）、鱼雷发射架 × 1~2
+ *              通讯   雷达、无线电、敌我识别器
+ *              其他   上层建筑本体（塌了雷达火控一起完）
+ *    动力系统  发动机 × n、舵机 × 1、电力系统 × 1
+ *    船体结构  主血条
+ *
+ *  每台设备同时有两种状态，互不相同：
+ *
+ *    故障 fault   自己坏的（设备老化、装填机卡壳、锅炉爆管）。
+ *                 每 5 分钟 1% 概率，坏了还能修好（每 5 分钟 10%）。
+ *                 开火、全速会让它更容易坏、更难修。
+ *    损坏 damage  别人打的（炮弹、鱼雷、近失弹、自己起火）。
+ *                 **不可逆**，只能靠损管抢修船体和上层建筑，
+ *                 设备本身打坏了就是打坏了。
+ *
+ *  两者可以叠加：一台发动机可以先被打坏 50%，再故障掉 75%，最后只剩一成动力。
+ *
+ *  所有判定都走 world.rng，同一个种子回放能复现。
+ * ========================================================================== */
+(function (N) {
+  'use strict';
+
+  var U = N.U;
+
+  var FAULT_INTERVAL = 300;    // 5 分钟：故障 / 修复判定
+  var DC_INTERVAL = 600;       // 10 分钟：损管维修回血
+
+  var P = {
+    fault: 0.01,             // 设备基础故障率（每 5 分钟）
+    repair: 0.10,            // 设备基础修复率
+
+    firingFault: 0.02,       // 开火：故障率 +2%
+    firingRepair: 0.04,      // 开火：修复率 -4%
+    fullFault: 0.01,         // 全速：故障率 +1%
+    fullRepair: 0.02,        // 全速：修复率 -2%
+
+    engFiringFault: 0.01,    // 发动机开火：故障率 +1%
+    engFiringRepair: 0.02,
+    engFullFault: 0.02,      // 发动机全速：故障率 +2%
+    engFullRepair: 0.04,
+
+    elecFiringFault: 0.03,   // 电力系统开火：故障率 +3%
+    elecFiringRepair: 0.05,
+
+    dcHeal: 0.05,            // 损管每 10 分钟回 5% 血
+    dcFiring: 0.02,          // 开火时 -2%
+    dcFull: 0.01,            // 全速时 -1%
+
+    engSteps: [25, 50, 75],  // 发动机每次故障/修复的动力变化量
+
+    elecRadioDelay: 60,      // 电力失灵：无线电延迟 +60 秒
+    elecIffError: 0.01,      // 电力失灵：敌我识别错误率 +1%
+    elecGun: 1.5,            // 电力失灵：炮击间隔 ×1.5
+    elecTorp: 2.0,           // 电力失灵：鱼雷装填间隔 ×2
+    elecPowerCut: 0.25       // 动力系统低于 25% 时电力系统失灵
+  };
+
+  /* ====================================================================== */
+  /*  建表                                                                  */
+  /* ====================================================================== */
+
+  /** 按权重把一块血条分给若干设备 */
+  function shareHP(zoneMax, weights) {
+    var sum = 0, k, out = {};
+    for (k in weights) sum += weights[k];
+    if (sum <= 0) return out;
+    for (k in weights) out[k] = zoneMax * weights[k] / sum;
+    return out;
+  }
+
+  function isFullSpeed(ship) {
+    var max = ship.effectiveMaxSpeed ? ship.effectiveMaxSpeed() : ship.cls.maxSpeed;
+    if (!(max > 2)) return false;
+    return ship.speed >= max * 0.92 || ship.orderedSpeed >= max * 0.98;
+  }
+
+  function isFiring(ship, world) {
+    if (!world) return false;
+    var lf = ship.lastFireTime == null ? -999 : ship.lastFireTime;
+    return (world.time - lf) < 20;
+  }
+
+  /**
+   * 给一艘舰建好设备表。构造 Ship 时调用一次。
+   */
+  function init(ship, world) {
+    var cls = ship.cls;
+
+    /* ---- 动力系统：发动机 + 舵机 + 电力，三者瓜分 power 血条 ---- */
+    var n = cls.engines || (cls.type === 'AK' ? 2 : (cls.type === 'DD' ? 2 : 4));
+    n = Math.max(1, Math.min(8, Math.round(n)));
+
+    var powerW = { elec: 0.25, rudder: 0.13 };
+    var i;
+    for (i = 0; i < n; i++) powerW['e' + i] = 0.62 / n;
+    var php = shareHP(ship.zoneMax.power, powerW);
+
+    ship.engines = [];
+    for (i = 0; i < n; i++) {
+      ship.engines.push({
+        idx: i,
+        name: (i + 1) + ' 号主机',
+        hpMax: php['e' + i],
+        hp: php['e' + i],
+        faulted: false,
+        faultLoss: 0,          // 故障掉的动力百分比（0/25/50/75）
+        destroyed: false
+      });
+    }
+
+    ship.rudder = {
+      name: '舵机',
+      hpMax: php.rudder, hp: php.rudder,
+      faulted: false, destroyed: false
+    };
+    ship.electrical = {
+      name: '电力系统',
+      hpMax: php.elec, hp: php.elec,
+      faulted: false, destroyed: false
+    };
+
+    /* ---- 上层建筑：炮塔 / 鱼雷管 / 雷达 / 识别器 / 电台 ---- */
+    var superW = {};
+    ship.mounts.forEach(function (m, k) { superW['m' + k] = 1.6; });
+    ship.torps.forEach(function (t, k) { superW['t' + k] = 1.0; });
+    superW.radar = 1.0;
+    superW.radio = 0.7;
+    superW.iff = 0.5;
+    var shp = shareHP(ship.zoneMax.superstructure, superW);
+
+    /* ---- 设备清单（统一遍历用） ---- */
+    ship.devList = [];
+
+    ship.mounts.forEach(function (m, k) {
+      m.fault = false;
+      m.destroyed = !!m.disabled;
+      m.hpMax = shp['m' + k];
+      m.hp = m.destroyed ? 0 : m.hpMax;
+      ship.devList.push({
+        kind: 'gun', group: 'superstructure', obj: m,
+        name: m.label + ' 炮塔', short: m.label + '炮',
+        get hp() { return m.hp; }, set hp(v) { m.hp = v; },
+        get hpMax() { return m.hpMax; },
+        get fault() { return m.fault; }, set fault(v) { m.fault = v; },
+        get destroyed() { return m.destroyed; }
+      });
+    });
+
+    ship.torps.forEach(function (t, k) {
+      t.fault = false;
+      t.destroyed = !!t.disabled;
+      t.hpMax = shp['t' + k];
+      t.hp = t.destroyed ? 0 : t.hpMax;
+      ship.devList.push({
+        kind: 'torp', group: 'superstructure', obj: t,
+        name: t.label + ' 号鱼雷发射管', short: t.label + '号鱼雷',
+        get hp() { return t.hp; }, set hp(v) { t.hp = v; },
+        get hpMax() { return t.hpMax; },
+        get fault() { return t.fault; }, set fault(v) { t.fault = v; },
+        get destroyed() { return t.destroyed; }
+      });
+    });
+
+    ship.radarDev = { hpMax: shp.radar, hp: ship.radarDestroyed ? 0 : shp.radar, faulted: false };
+    ship.radioDev = { hpMax: shp.radio, hp: ship.radioDestroyed ? 0 : shp.radio, faulted: false };
+    ship.iffDev = { hpMax: shp.iff, hp: ship.iffDestroyed ? 0 : shp.iff, faulted: false };
+
+    ship.devList.push({
+      kind: 'radar', group: 'superstructure', obj: ship.radarDev,
+      name: (cls.radar && cls.radar.name) || '雷达', short: '雷达',
+      get hp() { return ship.radarDev.hp; }, set hp(v) { ship.radarDev.hp = v; },
+      get hpMax() { return ship.radarDev.hpMax; },
+      get fault() { return ship.radarDev.faulted; }, set fault(v) { ship.radarDev.faulted = v; },
+      get destroyed() { return ship.radarDestroyed; }
+    });
+    ship.devList.push({
+      kind: 'radio', group: 'superstructure', obj: ship.radioDev,
+      name: '无线电', short: '电台',
+      get hp() { return ship.radioDev.hp; }, set hp(v) { ship.radioDev.hp = v; },
+      get hpMax() { return ship.radioDev.hpMax; },
+      get fault() { return ship.radioDev.faulted; }, set fault(v) { ship.radioDev.faulted = v; },
+      get destroyed() { return ship.radioDestroyed; }
+    });
+    ship.devList.push({
+      kind: 'iff', group: 'superstructure', obj: ship.iffDev,
+      name: '敌我识别器', short: '识别器',
+      get hp() { return ship.iffDev.hp; }, set hp(v) { ship.iffDev.hp = v; },
+      get hpMax() { return ship.iffDev.hpMax; },
+      get fault() { return ship.iffDev.faulted; }, set fault(v) { ship.iffDev.faulted = v; },
+      get destroyed() { return ship.iffDestroyed; }
+    });
+
+    /* ---- 计时器 ---- */
+    ship._faultT = 0;
+    ship._healT = 0;
+
+    // 场景预设损伤：把 steering / power 映射到新设备上
+    if (ship._presetSteering != null) {
+      setSteering(ship, ship._presetSteering);
+      ship._presetSteering = null;
+    }
+  }
+
+  /* ====================================================================== */
+  /*  设备查询                                                              */
+  /* ====================================================================== */
+
+  function techDevices(ship) {
+    var out = [];
+    if (!ship.devList) return out;
+    for (var i = 0; i < ship.devList.length; i++) {
+      var d = ship.devList[i];
+      if (d.kind !== 'gun' && d.kind !== 'torp') out.push(d);
+    }
+    return out;
+  }
+
+  function superDevices(ship) {
+    return ship.devList || [];
+  }
+
+  function powerDevices(ship) {
+    var out = [];
+    if (!ship.engines) return out;
+    for (var i = 0; i < ship.engines.length; i++) out.push(ship.engines[i]);
+    if (ship.rudder) out.push(ship.rudder);
+    if (ship.electrical) out.push(ship.electrical);
+    return out;
+  }
+
+  /* ====================================================================== */
+  /*  设备被打坏                                                             */
+  /* ====================================================================== */
+
+  function destroyDevice(ship, d, world) {
+    var o = d.obj || d;
+    if (d.kind === 'gun') {
+      o.disabled = true; o.ready = false; o.destroyed = true; o.hp = 0;
+    } else if (d.kind === 'torp') {
+      o.disabled = true; o.destroyed = true; o.hp = 0;
+    } else if (d.kind === 'radar') {
+      ship.radarDestroyed = true; o.hp = 0;
+    } else if (d.kind === 'radio') {
+      ship.radioDestroyed = true; o.hp = 0;
+    } else if (d.kind === 'iff') {
+      ship.iffDestroyed = true; o.hp = 0;
+    } else {
+      o.hp = 0; o.destroyed = true;
+    }
+    if (world && world.log && d.kind) {
+      world.log(ship.side, '💥 ' + ship.name + ' 的' + d.name + '被击毁', 'critical');
+    }
+  }
+
+  /**
+   * 结构区挨打时，把伤害也分到具体设备上。
+   * 按剩余血量加权随机挑一台 —— 所以可能先掉炮塔，也可能先掉雷达，
+   * 但总量和原来的"结构区血条"完全一致，不会凭空变强或变弱。
+   */
+  function routeDamage(ship, zoneKey, amount, world, route) {
+    if (!(amount > 0) || !ship.devList) return;
+    var list = zoneKey === 'power' ? powerDevices(ship) : superDevices(ship);
+    var pool = [], total = 0, i;
+    for (i = 0; i < list.length; i++) {
+      var d = list[i];
+      if (d.destroyed) continue;
+      if (d.hp <= 0) continue;
+      // 指定只打某一类设备（例如搁浅只伤螺旋桨和轴系）
+      if (route === 'engine' && !ship.engines) continue;
+      if (route === 'engine' && ship.engines.indexOf(d) < 0) continue;
+      pool.push(d);
+      total += d.hp;
+    }
+    if (!pool.length || total <= 0) return;
+
+    var r = (world && world.rng ? world.rng.next() : Math.random()) * total;
+    var pick = pool[pool.length - 1];
+    for (i = 0; i < pool.length; i++) {
+      r -= pool[i].hp;
+      if (r <= 0) { pick = pool[i]; break; }
+    }
+    pick.hp = Math.max(0, pick.hp - amount);
+    if (pick.hp <= 0 && !pick.destroyed) {
+      if (pick.kind) destroyDevice(ship, pick, world);
+      else pick.destroyed = true;
+    }
+  }
+
+  /* ====================================================================== */
+  /*  故障与修复                                                             */
+  /* ====================================================================== */
+
+  function logFault(ship, world, text, kind) {
+    if (world && world.log) world.log(ship.side, text, kind || 'warn');
+  }
+
+  function rollFaults(ship, world) {
+    if (!ship.devList || ship.sinking || ship.sunk) return;
+    var rng = world.rng;
+    var firing = isFiring(ship, world);
+    var full = isFullSpeed(ship);
+    var i, d, p;
+
+    /* ---- 技术设备：雷达 / 电台 / 识别器 / 炮塔 / 鱼雷管 ---- */
+    var tech = ship.devList;
+    for (i = 0; i < tech.length; i++) {
+      d = tech[i];
+      if (d.destroyed) continue;
+      if (d.fault) {
+        p = P.repair - (firing ? P.firingRepair : 0) - (full ? P.fullRepair : 0);
+        if (p > 0 && rng.chance(p)) {
+          d.fault = false;
+          logFault(ship, world, '🔧 ' + ship.name + ' 的' + d.name + '修好了', 'info');
+        }
+      } else {
+        p = P.fault + (firing ? P.firingFault : 0) + (full ? P.fullFault : 0);
+        if (rng.chance(p)) {
+          d.fault = true;
+          logFault(ship, world, '⚠ ' + ship.name + ' 的' + d.name + '故障', 'warn');
+        }
+      }
+    }
+
+    /* ---- 发动机 ---- */
+    for (i = 0; i < ship.engines.length; i++) {
+      var e = ship.engines[i];
+      if (e.destroyed) continue;
+      if (e.faulted) {
+        p = P.repair - (firing ? P.engFiringRepair : 0) - (full ? P.engFullRepair : 0);
+        if (p > 0 && rng.chance(p)) {
+          var fix = P.engSteps[rng.int(0, 2)];
+          e.faultLoss = Math.max(0, e.faultLoss - fix);
+          if (e.faultLoss <= 0) {
+            e.faulted = false;
+            logFault(ship, world, '🔧 ' + ship.name + ' 的' + e.name + '恢复', 'info');
+          } else {
+            logFault(ship, world, '🔧 ' + ship.name + ' 的' + e.name + '抢修回 ' + fix + '%', 'info');
+          }
+        }
+      } else {
+        p = P.fault + (firing ? P.engFiringFault : 0) + (full ? P.engFullFault : 0);
+        if (rng.chance(p)) {
+          e.faulted = true;
+          var lose = P.engSteps[rng.int(0, 2)];
+          e.faultLoss = Math.min(100, e.faultLoss + lose);
+          logFault(ship, world, '⚠ ' + ship.name + ' 的' + e.name + '故障，失去 ' + lose + '% 动力', 'warn');
+        }
+      }
+    }
+
+    /* ---- 舵机：只有全速时才容易出毛病，且不受其他因素影响 ---- */
+    var rd = ship.rudder;
+    if (rd && !rd.destroyed) {
+      if (rd.faulted) {
+        if (rng.chance(P.repair)) {
+          rd.faulted = false;
+          logFault(ship, world, '🔧 ' + ship.name + ' 的舵机修好了', 'info');
+        }
+      } else if (full && rng.chance(P.fault)) {
+        rd.faulted = true;
+        logFault(ship, world, '⚠ ' + ship.name + ' 舵机卡死，转向明显变慢', 'warn');
+      }
+    }
+
+    /* ---- 电力系统 ---- */
+    var el = ship.electrical;
+    if (el && !el.destroyed) {
+      if (el.faulted) {
+        p = P.repair - (firing ? P.elecFiringRepair : 0);
+        if (p > 0 && rng.chance(p)) {
+          el.faulted = false;
+          logFault(ship, world, '🔧 ' + ship.name + ' 电力系统恢复', 'info');
+        }
+      } else {
+        p = P.fault + (firing ? P.elecFiringFault : 0);
+        if (rng.chance(p)) {
+          el.faulted = true;
+          logFault(ship, world, '⚠ ' + ship.name + ' 电力系统失灵：雷达、无线电、火控全受影响', 'critical');
+        }
+      }
+    }
+  }
+
+  /* ====================================================================== */
+  /*  损管                                                                  */
+  /* ====================================================================== */
+
+  function damageControl(ship, world) {
+    if (ship.sunk || ship.sinking) return;
+    var firing = isFiring(ship, world);
+    var full = isFullSpeed(ship);
+    var heal = P.dcHeal - (firing ? P.dcFiring : 0) - (full ? P.dcFull : 0);
+    if (heal <= 0) return;
+
+    var did = false;
+    // 船体结构
+    if (ship.hull < ship.hullMax * 0.999) {
+      ship.hull = Math.min(ship.hullMax, ship.hull + ship.hullMax * heal);
+      did = true;
+    }
+    // 其他上层建筑
+    if (ship.zone && ship.zoneMax && ship.zone.superstructure < ship.zoneMax.superstructure * 0.999) {
+      ship.zone.superstructure = Math.min(ship.zoneMax.superstructure,
+        ship.zone.superstructure + ship.zoneMax.superstructure * heal);
+      did = true;
+    }
+    if (did) {
+      logFault(ship, world, '🛠 ' + ship.name + ' 损管抢修：船体与上层建筑各回 ' +
+        Math.round(heal * 100) + '%', 'info');
+    }
+  }
+
+  /* ====================================================================== */
+  /*  主循环                                                                */
+  /* ====================================================================== */
+
+  function update(ship, dt, world) {
+    if (ship.sunk || !ship.devList) return;
+    ship._faultT = (ship._faultT || 0) + dt;
+    if (ship._faultT >= FAULT_INTERVAL) {
+      ship._faultT -= FAULT_INTERVAL;
+      rollFaults(ship, world);
+    }
+    ship._healT = (ship._healT || 0) + dt;
+    if (ship._healT >= DC_INTERVAL) {
+      ship._healT -= DC_INTERVAL;
+      damageControl(ship, world);
+    }
+  }
+
+  /* ====================================================================== */
+  /*  对外接口                                                              */
+  /* ====================================================================== */
+
+  /** 推进效率 0..1：发动机损坏 + 故障叠加后的总输出 */
+  function propulsion(ship) {
+    var eng = ship.engines;
+    if (!eng || !eng.length) return U.clamp01(ship.power / 100);
+    var sum = 0;
+    for (var i = 0; i < eng.length; i++) {
+      var e = eng[i];
+      var frac = e.hpMax > 0 ? U.clamp01(e.hp / e.hpMax) : 1;
+      if (e.destroyed || frac <= 0.001) continue;          // 彻底打烂 = 一点动力都不剩
+      // 血量：<100% 掉 25%，<75% 掉 50%，<50% 掉 90%
+      var out = frac >= 0.999 ? 1 : (frac >= 0.75 ? 0.75 : (frac >= 0.5 ? 0.5 : 0.10));
+      // 故障：再乘上剩下的动力
+      out *= (1 - U.clamp01(e.faultLoss / 100));
+      sum += out;
+    }
+    return U.clamp01(sum / eng.length);
+  }
+
+  /** 转向时间倍数：舵机损坏 ×2/×3/×5，故障再 ×2 */
+  function turnFactor(ship) {
+    var r = ship.rudder;
+    if (!r) return 1;
+    var f = 1;
+    var frac = r.hpMax > 0 ? U.clamp01(r.hp / r.hpMax) : 1;
+    if (frac < 0.5) f *= 5;
+    else if (frac < 0.75) f *= 3;
+    else if (frac < 0.999) f *= 2;
+    if (r.faulted) f *= 2;
+    return f;
+  }
+
+  /** 电力系统失灵？故障、被打坏，或动力系统整体不足 25% */
+  function elecFailed(ship) {
+    var e = ship.electrical;
+    if (!e) return false;
+    if (e.destroyed || e.faulted) return true;
+    if (ship.zoneFrac && ship.zoneFrac('power') < P.elecPowerCut) return true;
+    return false;
+  }
+
+  function radarOk(ship) {
+    if (ship.radarDestroyed) return false;
+    if (ship.radarDev && ship.radarDev.faulted) return false;
+    return !elecFailed(ship);
+  }
+
+  function iffOk(ship) {
+    if (ship.iffDestroyed) return false;
+    if (ship.iffDev && ship.iffDev.faulted) return false;
+    return !elecFailed(ship);
+  }
+
+  function radioOk(ship) {
+    if (ship.radioDestroyed) return false;
+    if (ship.radioDev && ship.radioDev.faulted) return false;
+    return !elecFailed(ship);
+  }
+
+  function radioDelayBonus(ship) {
+    return elecFailed(ship) ? P.elecRadioDelay : 0;
+  }
+
+  function iffError(ship) {
+    var p = 0.01;
+    if (elecFailed(ship)) p += P.elecIffError;
+    return p;
+  }
+
+  /** 炮塔装填速度系数（1 = 正常；电力失灵时 1/1.5） */
+  function gunRate(ship) {
+    return elecFailed(ship) ? 1 / P.elecGun : 1;
+  }
+
+  /** 鱼雷装填速度系数（1 = 正常；电力失灵时 1/2） */
+  function torpRate(ship) {
+    return elecFailed(ship) ? 1 / P.elecTorp : 1;
+  }
+
+  /** 某座炮塔/鱼雷管现在能不能用 */
+  function mountOk(m) {
+    return !!m && !m.disabled && !m.fault && !m.destroyed;
+  }
+
+  /** 转向受损比例 → 写回 steering 字段（兼容老接口） */
+  function setSteering(ship, pct) {
+    if (!ship.rudder) { ship.steering = pct; return; }
+    var f = U.clamp01(pct / 100);
+    ship.rudder.hp = ship.rudder.hpMax * f;
+    ship.steering = pct;
+  }
+
+  /** 动力百分比 → 写回各发动机（兼容 setPowerPct / 场景预设） */
+  function setPowerPct(ship, pct) {
+    var p = U.clamp01(pct / 100);
+    ship.power = pct;
+    if (ship.zoneMax && ship.zoneMax.power > 0) ship.zone.power = ship.zoneMax.power * p;
+    if (!ship.engines) return;
+    for (var i = 0; i < ship.engines.length; i++) {
+      var e = ship.engines[i];
+      e.hp = e.hpMax * p;
+      e.faultLoss = 0;
+      e.faulted = false;
+      e.destroyed = false;
+    }
+  }
+
+  /** 结构区被打光时的连带后果 */
+  function onZoneLost(ship, k, world) {
+    var i;
+    if (k === 'weapons') {
+      ship.mounts.forEach(function (m) { m.hp = 0; m.disabled = true; m.ready = false; m.destroyed = true; });
+      ship.torps.forEach(function (t) { t.hp = 0; t.disabled = true; t.destroyed = true; });
+    } else if (k === 'comms') {
+      ship.radioDestroyed = true;
+      ship.iffDestroyed = true;
+      if (ship.radioDev) ship.radioDev.hp = 0;
+      if (ship.iffDev) ship.iffDev.hp = 0;
+    } else if (k === 'superstructure') {
+      for (i = 0; i < ship.devList.length; i++) {
+        var d = ship.devList[i];
+        d.hp = 0;
+        if (!d.destroyed && d.kind) destroyDevice(ship, d, null);
+      }
+    } else if (k === 'power') {
+      ship.power = 0;
+      if (ship.engines) ship.engines.forEach(function (e) { e.hp = 0; e.destroyed = true; });
+      if (ship.rudder) { ship.rudder.hp = 0; ship.rudder.destroyed = true; }
+      if (ship.electrical) { ship.electrical.hp = 0; ship.electrical.destroyed = true; }
+    }
+  }
+
+  /* ====================================================================== */
+  /*  给 UI 的文字                                                           */
+  /* ====================================================================== */
+
+  /** 当前所有故障（供左栏和详情面板显示） */
+  function faults(ship) {
+    var out = [];
+    if (!ship.devList) return out;
+    var i;
+    for (i = 0; i < ship.devList.length; i++) {
+      var d = ship.devList[i];
+      if (d.fault && !d.destroyed) out.push({ name: d.name, short: d.short, kind: d.kind });
+    }
+    if (ship.engines) {
+      for (i = 0; i < ship.engines.length; i++) {
+        var e = ship.engines[i];
+        if (e.faulted && !e.destroyed) {
+          out.push({ name: e.name, short: e.name.replace(' 号主机', '号机'), kind: 'engine', loss: e.faultLoss });
+        }
+      }
+    }
+    if (ship.rudder && ship.rudder.faulted) out.push({ name: '舵机', short: '舵机', kind: 'rudder' });
+    if (ship.electrical && ship.electrical.faulted) out.push({ name: '电力系统', short: '电力', kind: 'elec' });
+    return out;
+  }
+
+  /** 已经彻底打坏的设备 */
+  function destroyedList(ship) {
+    var out = [];
+    if (!ship.devList) return out;
+    for (var i = 0; i < ship.devList.length; i++) {
+      var d = ship.devList[i];
+      if (d.destroyed) out.push({ name: d.name, short: d.short, kind: d.kind });
+    }
+    if (ship.engines) {
+      ship.engines.forEach(function (e) {
+        if (e.destroyed) out.push({ name: e.name, short: e.name.replace(' 号主机', '号机'), kind: 'engine' });
+      });
+    }
+    if (ship.rudder && ship.rudder.destroyed) out.push({ name: '舵机', short: '舵机', kind: 'rudder' });
+    if (ship.electrical && ship.electrical.destroyed) out.push({ name: '电力系统', short: '电力', kind: 'elec' });
+    return out;
+  }
+
+  /** 一行摘要 */
+  function summary(ship) {
+    if (!ship.devList) return '';
+    var parts = [];
+    var f = faults(ship), d = destroyedList(ship);
+    if (d.length) parts.push('毁:' + d.map(function (x) { return x.short; }).join('/'));
+    if (f.length) parts.push('故障:' + f.map(function (x) { return x.short; }).join('/'));
+    return parts.join(' · ');
+  }
+
+  N.Damage = {
+    init: init,
+    update: update,
+    routeDamage: routeDamage,
+    onZoneLost: onZoneLost,
+    propulsion: propulsion,
+    turnFactor: turnFactor,
+    elecFailed: elecFailed,
+    radarOk: radarOk,
+    iffOk: iffOk,
+    radioOk: radioOk,
+    radioDelayBonus: radioDelayBonus,
+    iffError: iffError,
+    gunRate: gunRate,
+    torpRate: torpRate,
+    mountOk: mountOk,
+    setSteering: setSteering,
+    setPowerPct: setPowerPct,
+    faults: faults,
+    destroyedList: destroyedList,
+    summary: summary,
+    powerDevices: powerDevices,
+    isFullSpeed: isFullSpeed,
+    isFiring: isFiring,
+    P: P,
+    FAULT_INTERVAL: FAULT_INTERVAL,
+    DC_INTERVAL: DC_INTERVAL
+  };
+})(globalThis.Naval = globalThis.Naval || {});

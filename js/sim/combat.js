@@ -82,7 +82,7 @@
 
     for (var i = 0; i < ship.mounts.length; i++) {
       var m = ship.mounts[i];
-      if (m.disabled || !m.ready) continue;
+      if (m.disabled || m.destroyed || m.fault || !m.ready) continue;
       if (m.ammo < m.count) continue;
       if (sol.range > m.gun.maxRange) continue;
       if (!ship.mountArcOk(m, rel)) continue;
@@ -173,7 +173,7 @@
 
     for (var i = 0; i < ship.mounts.length; i++) {
       var m = ship.mounts[i];
-      if (m.disabled || !m.ready) continue;
+      if (m.disabled || m.destroyed || m.fault || !m.ready) continue;
       if (m.ammo < m.count) continue;
       if (dist > m.gun.maxRange) continue;
       if (!ship.mountArcOk(m, rel)) continue;
@@ -464,7 +464,7 @@
 
   function pickMount(rng, ship) {
     var avail = [];
-    for (var i = 0; i < ship.mounts.length; i++) if (!ship.mounts[i].disabled) avail.push(i);
+    for (var i = 0; i < ship.mounts.length; i++) if (!ship.mounts[i].disabled && !ship.mounts[i].destroyed) avail.push(i);
     if (!avail.length) return undefined;
     return rng.pick(avail);
   }
@@ -480,7 +480,7 @@
    * @param {Object} aimVel {course, speed} 目标估计运动
    */
   function launchTorpedoes(world, ship, mount, aimPos, aimCourse, aimSpeedKn, count, spreadDeg) {
-    if (ship.sunk || ship.sinking || mount.disabled) return 0;
+    if (ship.sunk || ship.sinking || mount.disabled || mount.destroyed || mount.fault) return 0;
     if (mount.loaded <= 0) return 0;
     var torp = mount.torp;
     var n = Math.min(count || mount.loaded, mount.loaded);

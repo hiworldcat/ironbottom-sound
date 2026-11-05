@@ -125,11 +125,28 @@
     return U.clamp(p, 0, 0.8);
   }
 
-  /** 无线电延迟（秒），只跟距离有关 */
+  /** 无线电延迟（秒），只跟距离有关；电力失灵时再加一分钟 */
   function radioDelay(world, a, b) {
     var d = a && b ? V.dist(a.pos, b.pos) : 8000;
+    var bonus = 0;
+    if (a && N.Damage) bonus = N.Damage.radioDelayBonus(a);
+    if (b && N.Damage) bonus = Math.max(bonus, N.Damage.radioDelayBonus(b));
     return DEFAULTS.radioDelay + d / 1000 * DEFAULTS.radioDelayPerKm +
-      world.rng.range(0, DEFAULTS.radioJitter);
+      world.rng.range(0, DEFAULTS.radioJitter) + bonus;
+  }
+
+  /** 这台舰的电台现在还能不能用（被打掉 / 故障 / 电力失灵都不行） */
+  function radioOk(ship) {
+    if (!ship) return false;
+    if (N.Damage) return N.Damage.radioOk(ship);
+    return !ship.radioDestroyed;
+  }
+
+  /** 识别器还能不能用 */
+  function iffOk(ship) {
+    if (!ship) return false;
+    if (N.Damage) return N.Damage.iffOk(ship);
+    return !ship.iffDestroyed;
   }
 
   /**
@@ -147,8 +164,8 @@
       return { ok: true, delay: 1.2 + world.rng.range(0, 2.4), lost: false, visual: true };
     }
 
-    if (from.radioDestroyed) return { ok: false, reason: 'from-radio' };
-    if (to.radioDestroyed) return { ok: false, reason: 'to-radio' };
+    if (!radioOk(from)) return { ok: false, reason: 'from-radio' };
+    if (!radioOk(to)) return { ok: false, reason: 'to-radio' };
 
     var p = lossChance(world, from.side);
     // 通信结构受损 → 发射机功率不足、天线被打歪，丢包率显著上升
@@ -202,6 +219,31 @@
   }
 
   /** 本舰状态快照（带定位误差） */
+  /** 设备状态快照：跟着无线电一起走，视距外看到的就是旧数据 */
+  function devSnapshot(ship) {
+    if (!ship.devList || !ship.engines) return null;
+    var alive = 0, engFault = 0, i;
+    for (i = 0; i < ship.engines.length; i++) {
+      if (!ship.engines[i].destroyed) alive++;
+      if (ship.engines[i].faulted && !ship.engines[i].destroyed) engFault++;
+    }
+    var D = N.Damage;
+    return {
+      engines: ship.engines.length,
+      alive: alive,
+      engFault: engFault,
+      prop: D ? D.propulsion(ship) : 1,
+      turn: D ? D.turnFactor(ship) : 1,
+      elec: D ? D.elecFailed(ship) : false,
+      radar: D ? D.radarOk(ship) : !ship.radarDestroyed,
+      radio: D ? D.radioOk(ship) : !ship.radioDestroyed,
+      iff: D ? D.iffOk(ship) : !ship.iffDestroyed,
+      fc: !ship.fcDestroyed,
+      faults: D ? D.faults(ship).map(function (f) { return f.short; }) : [],
+      dead: D ? D.destroyedList(ship).map(function (d) { return d.short; }) : []
+    };
+  }
+
   function snapshot(world, ship, exact) {
     var err = { x: 0, y: 0 }, posErr = 0;
     if (!exact) {
@@ -228,14 +270,16 @@
       engage: !!ship.engage,
       targetTrackId: ship.targetTrackId || null,
       torps: ship.torps ? ship.torps.reduce(function (a, t) { return a + (t.loaded || 0); }, 0) : 0,
-      radio: !ship.radioDestroyed,
-      iff: !ship.iffDestroyed,
+      radio: radioOk(ship),
+      iff: iffOk(ship),
       zones: ship.zoneFrac ? {
         power: ship.zoneFrac('power'),
         weapons: ship.zoneFrac('weapons'),
         superstructure: ship.zoneFrac('superstructure'),
         comms: ship.zoneFrac('comms')
       } : null,
+      // 设备状态也要走报告 —— 视距外的舰，你看到的设备情况同样是旧的
+      dev: devSnapshot(ship),
       sunk: !!ship.sunk,
       sinking: !!ship.sinking,
       reportedAt: world.time,
@@ -409,8 +453,9 @@
    */
   function classify(world, cmd, o) {
     var flag = flagshipOf(world, cmd.side);
-    if (!flag || flag.iffDestroyed) return 'unknown';
-    if (world.rng.chance(DEFAULTS.iffError)) {
+    if (!iffOk(flag)) return 'unknown';
+    var err = N.Damage ? N.Damage.iffError(flag) : DEFAULTS.iffError;
+    if (world.rng.chance(err)) {
       return world.rng.chance(0.5) ? 'friendly' : 'unknown';
     }
     return 'hostile';
@@ -581,7 +626,7 @@
       lost: cmd.lost,
       lostPct: total ? Math.round(cmd.lost / total * 100) : 0,
       radioOk: !!flag && !flag.radioDestroyed,
-      iffOk: !!flag && !flag.iffDestroyed
+      iffOk: iffOk(flag)
     };
   }
 

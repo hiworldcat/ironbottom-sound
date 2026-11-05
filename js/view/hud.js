@@ -25,6 +25,7 @@
       envVis: $('envVis'),
       envWind: $('envWind'),
       envMoon: $('envMoon'),
+      devList: $('devList'),
       posRead: $('posRead'),
       rosterList: $('rosterList'),
       rosterCount: $('rosterCount'),
@@ -572,6 +573,95 @@
     box.innerHTML = html;
   };
 
+  /* ---------------------------------------------------------------- 设备 */
+  /**
+   * 设备与损管面板：主机 / 舵机 / 电力 / 雷达 / 电台 / 识别器 / 火控，
+   * 外加损管还要多久能再抢修一次。
+   */
+  HUD.prototype.renderDevices = function (ship, world, stale, vw) {
+    var box = this.el.devList;
+    if (!box || !N.Damage) return;
+    var D = N.Damage;
+    var rows = [];
+    var i;
+
+    // 设备状态一律从"你手上的那份报告"取：旗舰是实时的，别的舰可能是几分钟前的
+    var dv = (vw && vw.dev) ? vw.dev : null;
+
+    /* 主机 */
+    var engTotal, engAlive, engFault, prop;
+    if (dv) {
+      engTotal = dv.engines; engAlive = dv.alive; engFault = dv.engFault; prop = dv.prop;
+    } else {
+      engAlive = 0; engFault = 0;
+      for (i = 0; i < ship.engines.length; i++) {
+        if (!ship.engines[i].destroyed) engAlive++;
+        if (ship.engines[i].faulted && !ship.engines[i].destroyed) engFault++;
+      }
+      engTotal = ship.engines.length;
+      prop = D.propulsion(ship);
+    }
+    var engTxt = engAlive + '/' + engTotal + ' 台';
+    if (engFault) engTxt += ' · ' + engFault + ' 台故障';
+    rows.push(['主机', engTxt + '（推进 ' + Math.round(prop * 100) + '%）',
+      engAlive === 0 ? 'bad' : (engFault || prop < 0.99 ? 'warn' : 'ok')]);
+
+    /* 舵机 */
+    var tf = dv ? dv.turn : D.turnFactor(ship);
+    rows.push(['舵机', tf > 1 ? '转向时间 ×' + tf : '正常',
+      tf >= 3 ? 'bad' : (tf > 1 ? 'warn' : 'ok')]);
+
+    /* 电力系统 */
+    var elec = dv ? dv.elec : D.elecFailed(ship);
+    var elecWhy = '';
+    if (elec && !dv) {
+      elecWhy = (ship.electrical && ship.electrical.destroyed) ? '损坏'
+        : (ship.electrical && ship.electrical.faulted) ? '故障'
+          : (ship.zoneFrac('power') < 0.25) ? '动力不足' : '';
+    }
+    rows.push(['电力', elec ? '失灵' + (elecWhy ? '（' + elecWhy + '）' : '') : '正常',
+      elec ? 'bad' : 'ok']);
+
+    /* 通讯设备 */
+    var devs = [
+      ['雷达', dv ? dv.radar : D.radarOk(ship), dv ? false : ship.radarDestroyed],
+      ['电台', dv ? dv.radio : D.radioOk(ship), dv ? false : ship.radioDestroyed],
+      ['识别器', dv ? dv.iff : D.iffOk(ship), dv ? false : ship.iffDestroyed]
+    ];
+    var faultShorts = dv ? (dv.faults || []) : D.faults(ship).map(function (f) { return f.short; });
+    var deadShorts = dv ? (dv.dead || []) : D.destroyedList(ship).map(function (d) { return d.short; });
+    for (i = 0; i < devs.length; i++) {
+      var nm = devs[i][0], usable = devs[i][1], destroyed = devs[i][2];
+      var txt, cls;
+      if (destroyed) { txt = '击毁'; cls = 'bad'; }
+      else if (!usable && elec) { txt = '电力失灵'; cls = 'warn'; }
+      else if (!usable) { txt = '故障'; cls = 'warn'; }
+      else { txt = '正常'; cls = 'ok'; }
+      rows.push([nm, txt, cls]);
+    }
+
+    /* 火控 */
+    var fc = dv ? dv.fc : !ship.fcDestroyed;
+    rows.push(['火控', fc ? '正常' : '击毁', fc ? 'ok' : 'bad']);
+
+    /* 损管（只有自己这边的舰知道自己的抢修进度） */
+    if (!stale && !ship.sunk && !ship.sinking && ship.side === world.playerSide) {
+      var healT = Math.max(0, D.DC_INTERVAL - (ship._healT || 0));
+      var mm = Math.floor(healT / 60), ss = Math.round(healT % 60);
+      rows.push(['损管', '下次抢修 ' + mm + '分' + (ss < 10 ? '0' : '') + ss + '秒', 'ok']);
+    }
+
+    var html = '';
+    for (i = 0; i < rows.length; i++) {
+      html += '<div class="dev-row"><span class="dev-k">' + rows[i][0] + '</span>' +
+        '<span class="dev-v ' + rows[i][2] + '">' + rows[i][1] + '</span></div>';
+    }
+    if (deadShorts.length) html += '<div class="dev-note">已毁：' + deadShorts.join('、') + '</div>';
+    if (faultShorts.length) html += '<div class="dev-note">故障：' + faultShorts.join('、') + '</div>';
+    if (stale) html += '<div class="dev-note">以上是无线电报告的旧数据</div>';
+    if (box.innerHTML !== html) box.innerHTML = html;
+  };
+
   /* ---------------------------------------------------------------- 战报 */
   HUD.prototype.appendLog = function (world) {
     var box = this.el.log;
@@ -784,6 +874,8 @@
     zoneRow(this.el.barZoneSuper, this.el.txtZoneSuper, 'superstructure');
     zoneRow(this.el.barZoneComms, this.el.txtZoneComms, 'comms');
 
+    this.renderDevices(ship, world, stale, vw);
+
     this.el.dSpeed.textContent = spdNow.toFixed(1) + ' / ' + ship.effectiveMaxSpeed().toFixed(1) + ' kn';
     this.el.dHeading.textContent = Math.round(U.norm360(hdgNow)) + '° (' + U.bearingName(hdgNow) + ')';
     if (ship.pendingOrder) {
@@ -895,8 +987,9 @@
     var mh = '';
     for (var i = 0; i < ship.mounts.length; i++) {
       var m = ship.mounts[i];
-      var st = m.disabled ? '损毁' : (m.ready ? '待发' : '装填 ' + Math.ceil(m.reload) + 's');
-      var cls = m.disabled ? 'disabled' : (m.ready ? 'ready' : 'reloading');
+      var dead = m.disabled || m.destroyed;
+      var st = dead ? '损毁' : (m.fault ? '故障' : (m.ready ? '待发' : '装填 ' + Math.ceil(m.reload) + 's'));
+      var cls = dead ? 'disabled' : (m.fault ? 'fault' : (m.ready ? 'ready' : 'reloading'));
       mh += '<div class="mount-row ' + cls + '">' +
         '<span class="m-id">' + m.label + '</span>' +
         '<span class="m-state">' + (m.count > 1 ? m.count + '×' : '') + m.gun.caliber + 'mm ' + st + '</span>' +
@@ -912,9 +1005,10 @@
       var th = '';
       for (var j = 0; j < ship.torps.length; j++) {
         var t = ship.torps[j];
-        var st2 = t.disabled ? '损毁' : (t.loaded > 0 ? t.loaded + '/' + t.tubes + ' 待发' :
-          '装填 ' + Math.ceil(t.reload / 60) + '分');
-        th += '<div class="mount-row ' + (t.disabled ? 'disabled' : (t.loaded > 0 ? 'ready' : 'reloading')) + '">' +
+        var tdead = t.disabled || t.destroyed;
+        var st2 = tdead ? '损毁' : (t.fault ? '故障' : (t.loaded > 0 ? t.loaded + '/' + t.tubes + ' 待发' :
+          '装填 ' + Math.ceil(t.reload / 60) + '分'));
+        th += '<div class="mount-row ' + (tdead ? 'disabled' : (t.fault ? 'fault' : (t.loaded > 0 ? 'ready' : 'reloading'))) + '">' +
           '<span class="m-id">' + t.label + '</span>' +
           '<span class="m-state">' + t.torp.name + ' ' + st2 + '</span></div>';
       }
@@ -1552,6 +1646,15 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span>会突然来<b>阵雨</b>和<b>雨飑</b>，能见度可能几分钟内掉一半再恢复；战报里会写</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>起火</b>的舰自己就是一根烟囱：烟顺风飘，挡在观察者和目标之间时瞭望会打折；不过夜里火光也最好认</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>鼠标停在顶栏气象条上，能看到当前雷达和无线电被削了多少</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>设备与损管</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>每艘舰拆成<b>具体设备</b>：每座炮塔、每个鱼雷发射管、雷达、电台、敌我识别器、每台主机、舵机、电力系统，各自有血条</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>故障</b>是自己坏的：每 5 分钟 <b>1%</b>，修好也是每 5 分钟 <b>10%</b>。<b>开火</b>时故障率 +2%、修复率 −4%；<b>全速</b>时 +1% / −2%</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>损坏</b>是别人打的（炮弹、鱼雷、近失弹、起火），<b>修不好</b>。设备血条算在上层建筑里，上层塌了设备跟着全毁</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>主机每坏一档就掉动力：血条 &lt;100% 掉 25%，&lt;75% 掉 50%，&lt;50% 掉 90%；<b>故障</b>再叠 25/50/75%。故障和损坏<b>可以叠加</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>舵机</b>：血条 &lt;100% 转向时间 ×2，&lt;75% ×3，&lt;50% ×5；舵机<b>卡死</b>再 ×2。舵机故障只在全速时才容易出</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>电力系统</b>一失灵，雷达、电台、识别器全停，无线电延迟 +1 分钟，炮击间隔 ×1.5，鱼雷装填 ×2，识别错误率 +1%；动力系统掉到 25% 以下也会连带失灵</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>损管</b>每 10 分钟给船体和上层建筑各回 <b>5%</b> 血（开火 −2%、全速 −1%）；武器、通信、动力它修不了</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>详情面板的「设备与损管」一栏实时显示主机、舵机、电力、雷达、电台、识别器、火控的状态和下次抢修倒计时</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>R 观看回放（双方真实舰位与机动）· 空格暂停 · 1/2/3/4 时间倍率</span></div>' +

@@ -97,7 +97,7 @@
       maxSpeed: 32.7, cruiseSpeed: 15, accel: 0.09, decel: 0.16,
       turnRate: 2.6, turnRateMin: 1.1,
       armor: { belt: 127, deck: 57, turret: 203, barbette: 152, ctic: 127 },
-      hull: 110, floodCapacity: 100, damageControl: 1.0,
+      engines: 4, hull: 110, floodCapacity: 100, damageControl: 1.0,
       mounts: [
         { label: 'A', pos: 0.70, count: 3, gun: '8in55', arc: 'fwd', armor: 203 },
         { label: 'B', pos: 0.46, count: 3, gun: '8in55', arc: 'fwd', armor: 203 },
@@ -119,7 +119,7 @@
       maxSpeed: 33.5, cruiseSpeed: 15, accel: 0.10, decel: 0.18,
       turnRate: 2.8, turnRateMin: 1.2,
       armor: { belt: 127, deck: 51, turret: 165, barbette: 152, ctic: 152 },
-      hull: 92, floodCapacity: 100, damageControl: 1.0,
+      engines: 4, hull: 92, floodCapacity: 100, damageControl: 1.0,
       mounts: [
         { label: 'A', pos: 0.80, count: 3, gun: '6in47', arc: 'fwd', armor: 165 },
         { label: 'B', pos: 0.60, count: 3, gun: '6in47', arc: 'fwd', armor: 165 },
@@ -143,7 +143,7 @@
       maxSpeed: 32.5, cruiseSpeed: 15, accel: 0.10, decel: 0.18,
       turnRate: 2.8, turnRateMin: 1.2,
       armor: { belt: 127, deck: 51, turret: 165, barbette: 152, ctic: 127 },
-      hull: 100, floodCapacity: 100, damageControl: 1.05,
+      engines: 4, hull: 100, floodCapacity: 100, damageControl: 1.05,
       // 12 门 6 英寸：四座三联装，没有鱼雷发射管 —— 靠炮打，靠驱逐舰放雷
       mounts: [
         { label: 'A', pos: 0.78, count: 3, gun: '6in47', arc: 'fwd', armor: 165 },
@@ -164,7 +164,7 @@
       maxSpeed: 36.5, cruiseSpeed: 15, accel: 0.16, decel: 0.30,
       turnRate: 4.2, turnRateMin: 1.8,
       armor: { belt: 19, deck: 13, turret: 13, barbette: 13, ctic: 13 },
-      hull: 58, floodCapacity: 100, damageControl: 1.0,
+      engines: 2, hull: 58, floodCapacity: 100, damageControl: 1.0,
       mounts: [
         { label: '1', pos: 0.80, count: 1, gun: '5in38', arc: 'fwd', armor: 13 },
         { label: '2', pos: 0.58, count: 1, gun: '5in38', arc: 'fwd', armor: 13 },
@@ -188,7 +188,7 @@
       maxSpeed: 32.5, cruiseSpeed: 15, accel: 0.11, decel: 0.19,
       turnRate: 3.0, turnRateMin: 1.3,
       armor: { belt: 95, deck: 32, turret: 32, barbette: 32, ctic: 64 },
-      hull: 78, floodCapacity: 100, damageControl: 1.0,
+      engines: 2, hull: 78, floodCapacity: 100, damageControl: 1.0,
       mounts: [
         { label: 'A', pos: 0.82, count: 2, gun: '5in38', arc: 'fwd', armor: 32 },
         { label: 'B', pos: 0.66, count: 2, gun: '5in38', arc: 'fwd', armor: 32 },
@@ -213,7 +213,7 @@
       maxSpeed: 14.5, cruiseSpeed: 11.5, accel: 0.05, decel: 0.10,
       turnRate: 1.3, turnRateMin: 0.6,
       armor: { belt: 14, deck: 10, turret: 0, barbette: 0, ctic: 12 },
-      hull: 92, floodCapacity: 150, damageControl: 0.8,
+      engines: 2, hull: 92, floodCapacity: 150, damageControl: 0.8,
       mounts: [],
       torps: [],
       radar: null,
@@ -230,7 +230,7 @@
       maxSpeed: 35.0, cruiseSpeed: 15, accel: 0.16, decel: 0.30,
       turnRate: 4.4, turnRateMin: 1.8,
       armor: { belt: 12, deck: 8, turret: 3, barbette: 3, ctic: 12 },
-      hull: 54, floodCapacity: 100, damageControl: 0.9,
+      engines: 2, hull: 54, floodCapacity: 100, damageControl: 0.9,
       mounts: [
         { label: '1', pos: 0.78, count: 2, gun: '127mm50', arc: 'fwd', armor: 3 },
         { label: '2', pos: 0.56, count: 2, gun: '127mm50', arc: 'fwd', armor: 3 },
@@ -254,7 +254,7 @@
       turnRate: 2.5, turnRateMin: 1.0,
       // 日舰重视水下防护与航速，甲板与炮塔装甲明显偏薄
       armor: { belt: 102, deck: 37, turret: 25, barbette: 75, ctic: 102 },
-      hull: 108, floodCapacity: 100, damageControl: 0.9,
+      engines: 4, hull: 108, floodCapacity: 100, damageControl: 0.9,
       mounts: [
         { label: '1', pos: 0.78, count: 2, gun: '20cm50', arc: 'fwd', armor: 25 },
         { label: '2', pos: 0.58, count: 2, gun: '20cm50', arc: 'fwd', armor: 25 },
@@ -280,7 +280,7 @@
       maxSpeed: 35.3, cruiseSpeed: 15, accel: 0.13, decel: 0.22,
       turnRate: 3.4, turnRateMin: 1.4,
       armor: { belt: 64, deck: 29, turret: 20, barbette: 51, ctic: 51 },
-      hull: 78, floodCapacity: 100, damageControl: 0.9,
+      engines: 3, hull: 78, floodCapacity: 100, damageControl: 0.9,
       mounts: [
         { label: '1', pos: 0.80, count: 1, gun: '14cm50', arc: 'fwd', armor: 20 },
         { label: '2', pos: 0.34, count: 1, gun: '14cm50', arc: 'all', armor: 20 },
@@ -306,7 +306,7 @@
       maxSpeed: 35.5, cruiseSpeed: 15, accel: 0.16, decel: 0.30,
       turnRate: 4.4, turnRateMin: 1.8,
       armor: { belt: 12, deck: 8, turret: 3, barbette: 3, ctic: 12 },
-      hull: 56, floodCapacity: 100, damageControl: 0.9,
+      engines: 2, hull: 56, floodCapacity: 100, damageControl: 0.9,
       mounts: [
         { label: '1', pos: 0.76, count: 2, gun: '127mm50', arc: 'fwd', armor: 3 },
         { label: '2', pos: 0.50, count: 2, gun: '127mm50', arc: 'fwd', armor: 3 },
@@ -328,7 +328,7 @@
       maxSpeed: 34.0, cruiseSpeed: 15, accel: 0.17, decel: 0.32,
       turnRate: 4.6, turnRateMin: 1.9,
       armor: { belt: 12, deck: 8, turret: 3, barbette: 3, ctic: 12 },
-      hull: 50, floodCapacity: 100, damageControl: 0.9,
+      engines: 2, hull: 50, floodCapacity: 100, damageControl: 0.9,
       mounts: [
         { label: '1', pos: 0.80, count: 1, gun: '127mm50', arc: 'fwd', armor: 3 },
         { label: '2', pos: 0.58, count: 1, gun: '127mm50', arc: 'fwd', armor: 3 },
@@ -353,7 +353,7 @@
       turnRate: 6.0, turnRateMin: 3.0,
       armor: { belt: 0, deck: 0, turret: 0, barbette: 0, ctic: 0 },
       // 木壳小艇：一发 5 英寸炮弹就能打碎，浪头打过来都可能翻
-      hull: 9, floodCapacity: 30, damageControl: 0.4,
+      engines: 1, hull: 9, floodCapacity: 30, damageControl: 0.4,
       mounts: [],
       torps: [],
       radar: null,
@@ -415,3 +415,4 @@
     return cls.torps.length ? N.Torpedoes[cls.torps[0].torp] : null;
   };
 })(globalThis.Naval = globalThis.Naval || {});
+

@@ -90,6 +90,8 @@
 
       /* ---------------- 雷达 ---------------- */
       var r = observer.cls.radar;
+      // 雷达被打坏、故障、或者电力失灵，都用不了
+      if (N.Damage && !N.Damage.radarOk(observer)) r = null;
       if (r && !observer.radarDestroyed) {
         // 上层建筑受损 → 天线基座、波导管跟着遭殃，雷达作用距离成比例缩水
         var rRange = r.range * (0.62 + 0.38 * Math.sqrt(target.cls.displacement / 12000)) *
