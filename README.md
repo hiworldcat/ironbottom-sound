@@ -43,8 +43,8 @@
 | 舰体结构分区 | 战后史实与回放 |
 | ![雨飑](screenshots/shot-weather-storm.png) | ![月夜](screenshots/shot-weather-night.png) |
 | 雨飑过境：能见度 5.5 km，雷达 ×0.45 | 夜战：月光决定能看多远 |
-| ![天气预报](screenshots/shot-weather-brief.png) | |
-| 战前简报里的天气预报 | |
+| ![天气预报](screenshots/shot-weather-brief.png) | ![线上夜战](screenshots/shot-live-weather.png) |
+| 战前简报里的天气预报 | 线上版：夜战，月光 34% |
 
 ---
 
