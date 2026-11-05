@@ -75,8 +75,9 @@
 
   <div class="tb-right">
     <div class="env-chip pos-chip" id="posRead" title="视野中心的位置">—</div>
-    <div class="env-chip" id="envVis">能见度 22.0 km</div>
-    <div class="env-chip" id="envWind">风 120° / 12 kn</div>
+    <div class="env-chip" id="envVis" title="瞭望哨能见距离">能见度 22.0 km</div>
+    <div class="env-chip" id="envWind" title="风向 / 风速 / 海况">东北风 12 kn · 小浪</div>
+    <div class="env-chip" id="envMoon" title="月光 / 云量">月光 —</div>
     <button class="tbtn ghost" id="btnFit" title="全览 (Q)">全览</button>
     <button class="tbtn ghost" id="btnReplay" title="战斗回放 (R)">回放</button>
     <button class="tbtn ghost" id="btnHelp">?</button>
@@ -291,6 +292,7 @@
 <script src="js/data/ships.js"></script>
 <script src="js/data/scenarios.js"></script>
 <script src="js/data/campaign.js"></script>
+<script src="js/sim/weather.js"></script>
 <script src="js/sim/sensors.js"></script>
 <script src="js/sim/ship.js"></script>
 <script src="js/sim/combat.js"></script>

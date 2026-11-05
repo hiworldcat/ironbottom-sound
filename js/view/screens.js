@@ -160,6 +160,12 @@
         sc.title + '<br>' + (sc.brief && sc.brief.length ? sc.brief[sc.brief.length - 1] : '') +
         '</div>';
 
+      if (N.Weather && sc.env) {
+        body += '<div class="wx-forecast"><span class="wf-k">天气预报</span>' +
+          '<span class="wf-v">' + N.Weather.forecast(sc.env) + '</span>' +
+          '<span class="wf-note">实际会变 —— 风浪雨一直在动，雷达和瞭望都跟着变</span></div>';
+      }
+
       if (sc.objectives && sc.objectives.length) {
         body += '<div class="obj-list">';
         sc.objectives.forEach(function (o) {

@@ -111,13 +111,54 @@ body::after {
   white-space: nowrap;
 }
 
+/* 气象条：变差的时候变黄，坏到影响作战的时候变红 */
+.env-chip.warn {
+  color: var(--amber);
+  border-color: rgba(232, 178, 84, 0.38);
+  background: rgba(60, 46, 20, 0.30);
+}
+
+.env-chip.bad {
+  color: var(--red);
+  border-color: rgba(226, 96, 88, 0.42);
+  background: rgba(64, 24, 22, 0.32);
+}
+
+/* 战前简报里的天气预报 */
+.wx-forecast {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid rgba(120, 200, 180, 0.45);
+  background: rgba(24, 58, 56, 0.22);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.wx-forecast .wf-k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--teal, #7fd0c0);
+  margin-right: 8px;
+}
+
+.wx-forecast .wf-v {
+  color: var(--fg, #d8e4e2);
+}
+
+.wx-forecast .wf-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--dim2, #7c8c8a);
+}
+
 /* 视野中心的经纬度 + 海域名 */
 .pos-chip {
   color: #9fd6c8;
   border-color: rgba(120, 200, 180, 0.28);
   background: rgba(24, 58, 56, 0.28);
-  letter-spacing: 0.02em;
-}
+  letter-spacing: 0.02em;}
 
 .tbtn {
   font-family: var(--mono);

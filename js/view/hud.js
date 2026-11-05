@@ -24,6 +24,7 @@
       missionSub: $('missionSub'),
       envVis: $('envVis'),
       envWind: $('envWind'),
+      envMoon: $('envMoon'),
       posRead: $('posRead'),
       rosterList: $('rosterList'),
       rosterCount: $('rosterCount'),
@@ -147,8 +148,36 @@
       this.el.missionSub.textContent = sc.subtitle + ' · ' + sc.date;
     }
 
-    this.el.envVis.textContent = '能见度 ' + (world.env.visibility / 1000).toFixed(1) + ' km';
-    this.el.envWind.textContent = '风 ' + Math.round(world.env.windDir) + '° / ' + world.env.windSpeed + ' kn';
+    /* ---- 气象条：能见度 / 风 / 海况 / 月光，全是活的 ---- */
+    var wx = world.weather;
+    if (wx && N.Weather) {
+      var arrow = wx.trend > 0 ? ' ↑' : (wx.trend < 0 ? ' ↓' : '');
+      this.el.envVis.textContent = '能见度 ' + (wx.visibility / 1000).toFixed(1) + ' km' + arrow;
+      this.el.envVis.className = 'env-chip' + (wx.visibility < 6000 ? ' bad' : (wx.visibility < 10000 ? ' warn' : ''));
+      this.el.envWind.textContent = N.Weather.windName(wx.windDir) + ' ' +
+        Math.round(wx.windSpeed) + ' kn · ' + N.Weather.seaName(wx.seaState);
+      this.el.envWind.className = 'env-chip' + (wx.seaState >= 5 ? ' warn' : '');
+      if (this.el.envMoon) {
+        var showMoon = wx.light !== 'day';
+        this.el.envMoon.style.display = showMoon ? '' : 'none';
+        if (showMoon) {
+          this.el.envMoon.textContent = N.Weather.moonName(wx.moon) + ' ' +
+            Math.round(N.Weather.moonEff(wx) * 100) + '%';
+          this.el.envMoon.className = 'env-chip' + (N.Weather.moonEff(wx) < 0.15 ? ' warn' : '');
+        }
+      }
+      var tip = N.Weather.brief(world) +
+        '\n雷达作用距离 ×' + N.Weather.radarFactor(world).toFixed(2) +
+        '，无线电丢包 +' + Math.round(N.Weather.radioExtra(world) * 100) + '%';
+      if (this.el.envVis.title !== tip) {
+        this.el.envVis.title = tip;
+        this.el.envWind.title = tip;
+        if (this.el.envMoon) this.el.envMoon.title = tip;
+      }
+    } else {
+      this.el.envVis.textContent = '能见度 ' + (world.env.visibility / 1000).toFixed(1) + ' km';
+      this.el.envWind.textContent = '风 ' + Math.round(world.env.windDir) + '° / ' + world.env.windSpeed + ' kn';
+    }
 
     // 视野中心在哪片海：拖图的时候一直跟着变
     if (this.el.posRead && N.MAP.describe) {
@@ -1515,6 +1544,14 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span>夜间、雾雨、海况差都会<b>提高丢包率</b>（延迟不变），干扰可叠加；左栏「链路」写着当前丢包率</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>敌我识别器有 <b>1%</b> 概率认错；<b>电台</b>或<b>识别器</b>被炮弹打掉就彻底不能用了</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>指挥舰被打沉会<b>指挥中断</b>几十秒，然后由下一艘大舰接替</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>气象</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>风、浪、雨、云、月光<b>每场都不一样，而且一直在变</b>（顶栏三条：能见度 / 风与海况 / 月光）</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>瞭望哨</b>：雨和雾压能见度，夜里月光越暗看得越近，阴天会把月光遮掉；满月夜能比新月夜多看四成</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>雷达</b>：雨幕衰减作用距离，<b>海况 5 以上</b>的海杂波会把驱逐舰这种小目标先埋掉，大舰不受影响</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>无线电</b>：雨静电和海况让丢包率上升，<b>雨飑</b>过境时最糟 —— 这时候你既看不见，也问不到</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>会突然来<b>阵雨</b>和<b>雨飑</b>，能见度可能几分钟内掉一半再恢复；战报里会写</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>起火</b>的舰自己就是一根烟囱：烟顺风飘，挡在观察者和目标之间时瞭望会打折；不过夜里火光也最好认</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>鼠标停在顶栏气象条上，能看到当前雷达和无线电被削了多少</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>R 观看回放（双方真实舰位与机动）· 空格暂停 · 1/2/3/4 时间倍率</span></div>' +

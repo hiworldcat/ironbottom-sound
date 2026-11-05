@@ -12,10 +12,15 @@
     this.env = {};
     for (var k in scenario.env) this.env[k] = scenario.env[k];
 
-    this.rng = new N.RNG(opts.seed || (scenario.id === 'day_surface_action' ? 19421115 : 12345));
+    this.seedValue = opts.seed || (scenario.id === 'day_surface_action' ? 19421115 : 12345);
+    this.rng = new N.RNG(this.seedValue);
     this.bus = new N.EventBus();
     this.time = 0;
     this.playerSide = scenario.playerSide;
+
+    /* 气象：风、浪、雨、云、月光（weather.js）——用自己的随机流，可复现 */
+    this.weather = null;
+    if (N.Weather) N.Weather.init(this, scenario);
     this.autopilot = !!opts.autopilot;   // true 时友方也由 AI 全权驾驶（用于测试/观战）
     this.ended = false;
     this.result = null;
@@ -508,28 +513,60 @@
 
   /* ------------------------------------------------------------------ 烟幕 */
   World.prototype.updateSmoke = function (dt) {
+    var wx = this.weather;
+    var windDir = wx ? wx.windDir : this.env.windDir;
+    var windSpd = wx ? wx.windSpeed : this.env.windSpeed;
+    // 风越大，烟飘得越快、散得越快；风小的时候烟会赖在原地
+    var wind = Geo.headingVec(U.norm360(windDir + 180));
+    var driftK = 0.25 * (0.5 + windSpd / 20);
+
     for (var i = 0; i < this.ships.length; i++) {
       var s = this.ships[i];
-      if (!s.smokeScreen || s.sunk || s.sinking) continue;
-      s.smokeTimer -= dt;
-      if (s.smokeTimer <= 0) {
-        s.smokeTimer = 5.5;
-        var wind = Geo.headingVec(U.norm360(this.env.windDir + 180));
-        this.smokes.push({
-          pos: Geo.dest(s.pos, U.norm360(s.heading + 180), s.cls.length * 0.4),
-          radius: 520, born: this.time, life: 210,
-          drift: { x: wind.x * this.env.windSpeed * 0.25, y: wind.y * this.env.windSpeed * 0.25 }
-        });
+      if (s.sunk || s.sinking) continue;
+
+      /* 主动施放烟幕 */
+      if (s.smokeScreen) {
+        s.smokeTimer -= dt;
+        if (s.smokeTimer <= 0) {
+          s.smokeTimer = 5.5;
+          this.smokes.push({
+            kind: 'screen',
+            pos: Geo.dest(s.pos, U.norm360(s.heading + 180), s.cls.length * 0.4),
+            radius: 520, born: this.time, life: 210,
+            drift: { x: wind.x * windSpd * driftK, y: wind.y * windSpd * driftK }
+          });
+        }
+      }
+
+      /* 起火：烧起来的舰自己就是一根烟囱，烟顺风压过去 */
+      if ((s.fire || 0) > 12) {
+        s.fireSmokeTimer = (s.fireSmokeTimer == null ? 1.5 : s.fireSmokeTimer) - dt;
+        if (s.fireSmokeTimer <= 0) {
+          s.fireSmokeTimer = Math.max(2.2, 7 - s.fire * 0.05);
+          var jitter = this.rng.dev(180);
+          this.smokes.push({
+            kind: 'fire',
+            pos: Geo.dest(s.pos, U.norm360(windDir + 180 + jitter / 60), s.cls.length * 0.25),
+            radius: 300, born: this.time,
+            life: 150,
+            drift: { x: wind.x * windSpd * driftK * 1.25, y: wind.y * windSpd * driftK * 1.25 }
+          });
+        }
       }
     }
+
     for (var k = this.smokes.length - 1; k >= 0; k--) {
       var sm = this.smokes[k];
       var age = this.time - sm.born;
       if (age > sm.life) { this.smokes.splice(k, 1); continue; }
       sm.pos.x += sm.drift.x * dt;
       sm.pos.y += sm.drift.y * dt;
-      sm.radius = 520 + age * 1.1;
+      // 风大时烟散得快（半径涨得快、活得短），风小时浓烟久久不散
+      var grow = sm.kind === 'fire' ? (0.8 + windSpd * 0.05) : 1.1;
+      sm.radius = (sm.kind === 'fire' ? 300 : 520) + age * grow;
     }
+    // 性能兜底：烟太多的时候先扔最老的
+    if (this.smokes.length > 260) this.smokes.splice(0, this.smokes.length - 260);
     for (var m = this.splashes.length - 1; m >= 0; m--) {
       var sp = this.splashes[m];
       sp.t += dt;
@@ -594,6 +631,9 @@
 
     /* 0.6 指挥链路：送达上一帧发出的报告、刷新本舰状态、指挥交接 */
     if (N.Command) N.Command.update(this, dt);
+
+    /* 0.7 气象推演：风浪雨一直在变，雷达和瞭望跟着变 */
+    if (N.Weather) N.Weather.update(this, dt);
 
     /* 1. AI（敌方全权，友方自动分配目标） */
     N.AI.update(this, dt, 'JP', true);

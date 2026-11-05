@@ -64,6 +64,21 @@
       squads: []
     };
 
+    /* 气象也录进去，回放时雨和雾才画得出来 */
+    if (w.weather) {
+      f.wx = {
+        d: Math.round(w.weather.windDir),
+        s: Math.round(w.weather.windSpeed * 10) / 10,
+        sea: Math.round(w.weather.seaState * 10) / 10,
+        vis: Math.round(w.weather.visibility),
+        rain: Math.round(w.weather.rain * 100) / 100,
+        cloud: Math.round(w.weather.cloud * 100) / 100,
+        moon: Math.round(w.weather.moon * 100) / 100,
+        squall: w.weather.squall ? 1 : 0,
+        light: w.weather.light
+      };
+    }
+
     var i, s;
     for (i = 0; i < w.ships.length; i++) {
       s = w.ships[i];
@@ -290,6 +305,19 @@
     var world = {
       time: t,
       env: sc.env,
+      // 回放里的气象跟着帧走（没有 wx 的旧录像就退回剧本 env）
+      weather: (a.wx || b.wx) ? {
+        windDir: (a.wx || b.wx).d,
+        windSpeed: (a.wx || b.wx).s,
+        seaState: (a.wx || b.wx).sea,
+        visibility: (a.wx || b.wx).vis,
+        baseVisibility: (a.wx || b.wx).vis,
+        rain: (a.wx || b.wx).rain,
+        cloud: (a.wx || b.wx).cloud,
+        moon: (a.wx || b.wx).moon,
+        squall: (a.wx || b.wx).squall,
+        light: (a.wx || b.wx).light || (sc.env && sc.env.light) || 'day'
+      } : null,
       playerSide: sc.playerSide,
       bounds: N.MAP.bounds,
       showAllSides: true,

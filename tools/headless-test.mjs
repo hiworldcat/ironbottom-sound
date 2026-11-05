@@ -10,7 +10,7 @@ const files = [
   'js/core.js',
   'js/data/ships.js',
   'js/data/scenarios.js',
-  'js/sim/sensors.js',
+  'js/sim/weather.js', 'js/sim/sensors.js',
   'js/sim/ship.js',
   'js/sim/combat.js',
   'js/sim/ai.js',
@@ -1012,9 +1012,113 @@ function testCollision() {
     `巡洋舰掉 ${bLost.toFixed(1)} 点（小船吃亏）`);
 }
 
+/* ==========================================================================
+ *  气象自检：风浪雨月，以及它们怎么通过雷达 / 瞭望 / 无线电改战局
+ * ========================================================================== */
+function testWeather() {
+  if (!N.Weather) { problems.push('气象自检: 没有 N.Weather'); return; }
+
+  /* 1) 开局能见度必须等于剧本值（标定过，否则夜战会被月光压到 3 km 以下） */
+  for (const sc of N.Scenarios.available()) {
+    const w = new N.World(sc, { seed: 11 });
+    if (Math.abs(w.weather.visibility - sc.env.visibility) > 1) {
+      problems.push(`气象自检: ${sc.id} 开局能见度 ${Math.round(w.weather.visibility)}，` +
+        `剧本写的是 ${sc.env.visibility}`);
+      break;
+    }
+  }
+
+  /* 2) 同种子 = 同天气；换种子要不一样（回放靠这个复现） */
+  const a = new N.World(N.Scenarios.get('savo_melee'), { seed: 4242 });
+  const b = new N.World(N.Scenarios.get('savo_melee'), { seed: 4242 });
+  for (let i = 0; i < 2400; i++) { a.update(0.1); b.update(0.1); }
+  if (N.Weather.status(a) !== N.Weather.status(b)) {
+    problems.push('气象自检: 同一个种子跑出了两种天气，回放会漂');
+  }
+  const c = new N.World(N.Scenarios.get('savo_melee'), { seed: 999 });
+  for (let i = 0; i < 2400; i++) c.update(0.1);
+  if (N.Weather.status(c) === N.Weather.status(a)) {
+    problems.push('气象自检: 换了种子天气没变，随机没生效');
+  }
+
+  /* 3) 40 分钟内天气要真的动起来 */
+  const e = new N.World(N.Scenarios.get('savo_melee'), { seed: 5 });
+  const t0 = N.Weather.status(e);
+  let moved = 0, visMin = e.weather.visibility, visMax = e.weather.visibility;
+  for (let i = 0; i < 300; i++) {
+    e.time += N.Weather.STEP;
+    N.Weather.step(e);
+    e.weather.visibility = N.Weather.effectiveVisibility(e.weather);
+    if (N.Weather.status(e) !== t0) moved++;
+    visMin = Math.min(visMin, e.weather.visibility);
+    visMax = Math.max(visMax, e.weather.visibility);
+  }
+  if (!moved) problems.push('气象自检: 40 分钟里天气一动没动');
+  if (visMax - visMin < 200) problems.push('气象自检: 能见度几乎没变化');
+
+  /* 4) 雷达：雨越大越短，雨飑里更短；海况高时小船先被海杂波埋掉 */
+  const r = new N.World(N.Scenarios.get('savo_melee'), { seed: 5 });
+  r.weather.squall = 0; r.weather.rain = 0; r.weather.seaState = 2;
+  const clearR = N.Weather.radarFactor(r);
+  r.weather.rain = 0.8;
+  const wetR = N.Weather.radarFactor(r);
+  if (!(wetR < clearR - 0.1)) problems.push('气象自检: 大雨没有削弱雷达');
+  r.weather.rain = 0; r.weather.squall = 1;
+  const sqR = N.Weather.radarFactor(r);
+  if (!(sqR < wetR)) problems.push('气象自检: 雨飑里雷达没再打折');
+  r.weather.squall = 0;
+  const dd = r.ships.find(s => s.cls.type === 'DD');
+  const ca = r.ships.find(s => s.cls.type === 'CA');
+  r.weather.seaState = 6;
+  const clutDd = N.Weather.seaClutter(r, dd);
+  const clutCa = N.Weather.seaClutter(r, ca);
+  if (!(clutDd < 0.95)) problems.push('气象自检: 高海况没有海杂波');
+  if (!(clutCa > clutDd)) problems.push('气象自检: 海杂波没按吨位区分，大舰也该吃亏');
+
+  /* 5) 瞭望：月光亮看得远，阴天把月光遮掉 */
+  const n = new N.World(N.Scenarios.get('savo_melee'), { seed: 5 });
+  n.weather.light = 'night'; n.weather.rain = 0; n.weather.cloud = 0;
+  n.weather.baseVisibility = 9000;
+  n.weather.moon = 0.02;
+  const dark = N.Weather.effectiveVisibility(n.weather);
+  n.weather.moon = 1;
+  const bright = N.Weather.effectiveVisibility(n.weather);
+  if (!(bright > dark * 1.25)) problems.push('气象自检: 满月没有比新月看得远');
+  n.weather.cloud = 1;
+  const cloudy = N.Weather.effectiveVisibility(n.weather);
+  if (!(cloudy < bright - 100)) problems.push('气象自检: 阴天没有把月光遮住');
+
+  /* 6) 无线电：雨和浪要加重丢包 */
+  const rc = new N.World(N.Scenarios.get('savo_melee'), { seed: 5 });
+  rc.weather.rain = 0; rc.weather.seaState = 2; rc.weather.squall = 0;
+  const dryRadio = N.Weather.radioExtra(rc);
+  rc.weather.rain = 0.9;
+  const wetRadio = N.Weather.radioExtra(rc);
+  if (!(wetRadio > dryRadio + 0.1)) problems.push('气象自检: 大雨没有加重无线电丢包');
+
+  /* 7) 起火冒烟 + 火烟挡视线 */
+  const f = new N.World(N.Scenarios.get('savo_melee'), { seed: 5 });
+  const s0 = f.ships[0], s1 = f.ships[1];
+  const mid = { x: (s0.pos.x + s1.pos.x) / 2, y: (s0.pos.y + s1.pos.y) / 2 };
+  const before = N.Sensors.fireSmokeBlocks(f, s0.pos, s1.pos);
+  f.smokes.push({ kind: 'fire', pos: mid, radius: 900, born: 0, life: 999, drift: { x: 0, y: 0 } });
+  const after = N.Sensors.fireSmokeBlocks(f, s0.pos, s1.pos);
+  if (!(after < before)) problems.push('气象自检: 火烟挡在中间却不影响瞭望');
+
+  const g = new N.World(N.Scenarios.get('savo_melee'), { seed: 5 });
+  const burn = g.ships.find(s => !s.sunk);
+  burn.fire = 60;
+  for (let i = 0; i < 300; i++) { g.time += 0.1; g.updateSmoke(0.1); }
+  if (!g.smokes.some(s => s.kind === 'fire')) problems.push('气象自检: 起火的舰不冒烟');
+
+  console.log(`气象自检: 40 分钟里天气变了 ${moved} 次，` +
+    `能见度 ${(visMin / 1000).toFixed(1)}~${(visMax / 1000).toFixed(1)} km，` +
+    `雷达 晴 ${clearR.toFixed(2)} / 雨 ${wetR.toFixed(2)} / 飑 ${sqR.toFixed(2)}，` +
+    `夜视 新月 ${(dark / 1000).toFixed(1)} / 满月 ${(bright / 1000).toFixed(1)} km`);
+}
+
 testSquad();
-testSquadNumbering();
-testFormationShape();
+testSquadNumbering();testFormationShape();
 testFormationEdit();
 testReplayShape();
 testCommand();
@@ -1024,6 +1128,7 @@ testZones();
 testTorpedoTrigger();
 testGrounding();
 testCollision();
+testWeather();
 
 const ids = only ? [only] : N.Scenarios.available().map(s => s.id);
 const results = [];

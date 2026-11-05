@@ -142,6 +142,8 @@
     this.drawBearingReadout(ctx, world, ui, cam, W, H);
 
     if (world.env && world.env.light && world.env.light !== 'day') this.drawNightTint(ctx, world, W, H);
+    // 天气覆盖层：雨丝 + 低能见度的雾感（画在夜色之上、照明弹之下）
+    this.drawWeather(ctx, world, W, H);
     // 照明弹画在夜色之上：它是光源，不该被夜色压暗
     this.drawIllumination(ctx, world, cam, W, H);
 
@@ -1484,6 +1486,57 @@
     g.addColorStop(1, 'rgba(1,5,13,' + (0.74 * k).toFixed(3) + ')');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  };
+
+  /* ------------------------------------------------------------------ 天气 */
+  /**
+   * 雨丝 + 低能见度雾感。
+   * 雨丝用固定伪随机相位，随时间平移 —— 不占世界的随机流，回放也稳。
+   */
+  Renderer.prototype.drawWeather = function (ctx, world, W, H) {
+    var wx = world.weather;
+    if (!wx) return;
+    var rain = wx.rain || 0;
+    var vis = wx.visibility;
+    var baseVis = wx.baseVisibility || vis;
+
+    ctx.save();
+
+    /* ---- 低能见度：四边压暗 + 一层灰白雾 ---- */
+    var haze = U.clamp01(1 - vis / Math.max(1, baseVis));
+    if (haze > 0.06) {
+      var g = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.22,
+        W * 0.5, H * 0.5, Math.max(W, H) * 0.70);
+      var nightish = (wx.light === 'night') ? 0.55 : 1;
+      g.addColorStop(0, 'rgba(150,168,178,0)');
+      g.addColorStop(0.6, 'rgba(150,168,178,' + (0.10 * haze * nightish).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(140,158,170,' + (0.34 * haze * nightish).toFixed(3) + ')');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    /* ---- 雨丝 ---- */
+    if (rain > 0.12) {
+      var windDir = wx.windDir == null ? 90 : wx.windDir;
+      var slant = Math.cos((windDir + 180) * Math.PI / 180) * 0.55;
+      var count = Math.round(40 + 240 * rain);
+      var len = 12 + 16 * rain;
+      var t = world.time;
+      ctx.strokeStyle = 'rgba(178,204,216,' + (0.10 + 0.22 * rain).toFixed(3) + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var i = 0; i < count; i++) {
+        // 固定相位 + 时间平移，雨就一直往下走
+        var sx = ((i * 137.5) % 1) * 0 + ((i * 61.803) % 100) / 100 * W;
+        var sy = (((i * 97.31) % 100) / 100 * H + t * (620 + (i % 7) * 60)) % H;
+        var x = (sx + sy * slant * 0.25) % W;
+        ctx.moveTo(x, sy);
+        ctx.lineTo(x + slant * len, sy + len);
+      }
+      ctx.stroke();
+    }
+
     ctx.restore();
   };
 

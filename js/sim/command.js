@@ -94,13 +94,15 @@
   /** 视距：指挥舰肉眼能不能直接看见这艘舰 */
   function inVisual(world, a, b) {
     if (!a || !b) return false;
-    var vis = (world.env && world.env.visibility) || 12000;
+    var vis = (world.weather && world.weather.visibility) ||
+      (world.env && world.env.visibility) || 12000;
     return V.dist(a.pos, b.pos) <= Math.min(vis, DEFAULTS.visualCap);
   }
 
   /** 无线电丢包率：夜间 / 天气 / 雨 / 海况 / 干扰，全部累加 */
   function lossChance(world, side) {
     var env = world.env || {};
+    var wx = world.weather;
     var p = DEFAULTS.lossBase;
 
     if (env.light === 'night') p += DEFAULTS.lossNight;
@@ -109,8 +111,13 @@
     var w = String(env.weather || '');
     if (/雾|雨|暴|雪|阴|飑/.test(w)) p += DEFAULTS.lossWeather;
 
-    p += U.clamp01((env.rain || 0) / 10) * DEFAULTS.lossRain;
-    if ((env.seaState || 0) >= 4) p += DEFAULTS.lossSea;
+    // 天气用**当前**的，不是剧本开局的
+    var rain = wx ? wx.rain : ((env.rain || 0) / 10);
+    var sea = wx ? wx.seaState : (env.seaState || 0);
+    p += U.clamp01(rain) * DEFAULTS.lossRain;
+    if (sea >= 4) p += DEFAULTS.lossSea;
+    // 雨飑：电离层噪声 + 天线在风里摇，链路最容易断的时候
+    if (wx && wx.squall) p += 0.10;
 
     // 电子干扰（预留接口，目前场景里都是 0）
     if (world.jamming && world.jamming[side]) p += world.jamming[side];

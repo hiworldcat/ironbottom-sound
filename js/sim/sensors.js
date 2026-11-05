@@ -33,13 +33,45 @@
       return U.clamp(0.55 + 0.45 * Math.sqrt(ship.cls.displacement / 12000), 0.55, 1.45);
     },
 
-    /** 该舰是否处于烟幕中 */
+    /** 该舰是否处于烟幕中（起火的烟不算遮蔽，那只是它自己冒烟） */
     inSmoke: function (world, pos) {
       for (var i = 0; i < world.smokes.length; i++) {
         var s = world.smokes[i];
+        if (s.kind === 'fire') continue;
         if (V.dist(pos, s.pos) < s.radius) return true;
       }
       return false;
+    },
+
+    /** 点到线段的距离 */
+    segDist: function (ax, ay, bx, by, px, py) {
+      var dx = bx - ax, dy = by - ay;
+      var l2 = dx * dx + dy * dy;
+      if (l2 < 1) return Math.sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
+      var t = U.clamp01(((px - ax) * dx + (py - ay) * dy) / l2);
+      return Math.sqrt((px - (ax + t * dx)) * (px - (ax + t * dx)) +
+        (py - (ay + t * dy)) * (py - (ay + t * dy)));
+    },
+
+    /**
+     * 起火冒的烟挡在观察者和目标之间 → 光学观测打折。
+     * 注意这和「烟幕」不一样：烟幕是目标自己躲进去，火烟是挡住别人的视线。
+     */
+    fireSmokeBlocks: function (world, from, to) {
+      var puffs = 0;
+      for (var i = 0; i < world.smokes.length; i++) {
+        var s = world.smokes[i];
+        if (s.kind !== 'fire') continue;
+        // 只算夹在两者之间的那一段
+        var mid = { x: (from.x + to.x) * 0.5, y: (from.y + to.y) * 0.5 };
+        if (V.dist(mid, s.pos) > s.radius + V.dist(from, to) * 0.5 + 800) continue;
+        if (Sensors.segDist(from.x, from.y, to.x, to.y, s.pos.x, s.pos.y) < s.radius * 0.85) {
+          puffs++;
+          if (puffs >= 2) break;
+        }
+      }
+      if (!puffs) return 1;
+      return puffs >= 2 ? 0.32 : 0.58;
     },
 
     /**
@@ -49,6 +81,7 @@
     observe: function (observer, target, world) {
       if (target.sunk || !target.alive) return null;
       var env = world.env;
+      var wx = world.weather;
       var range = V.dist(observer.pos, target.pos);
       var bearing = Geo.bearing(observer.pos, target.pos);
 
@@ -62,6 +95,8 @@
         var rRange = r.range * (0.62 + 0.38 * Math.sqrt(target.cls.displacement / 12000)) *
           (observer.sensorFactor ? observer.sensorFactor() : 1);
         if (world.env.radarJammed) rRange *= 0.5;
+        // 天气：雨幕衰减 + 高海况海杂波（小船先被淹没）
+        if (N.Weather) rRange *= N.Weather.radarFactor(world) * N.Weather.seaClutter(world, target);
         if (range < rRange) {
           radarOk = true;
           radarObs = {
@@ -72,8 +107,11 @@
         }
       }
 
-      /* ---------------- 光学 ---------------- */
-      var base = env.visibility * Sensors.sizeFactor(target);
+      /* ---------------- 光学（瞭望哨） ---------------- */
+      // 能见度是活的：雨、雨飑、月光、云量、浪沫都在改它（weather.js）
+      var vis = wx ? wx.visibility : env.visibility;
+      var rain = wx ? wx.rain : (env.rain || 0);
+      var base = vis * Sensors.sizeFactor(target);
       // 照明弹：被照亮的圈内，能见距离提升到 11 km（双方一视同仁）
       var lit = false;
       if (env.light !== 'day' && typeof world.illuminationAt === 'function') {
@@ -85,18 +123,21 @@
       var idBase = base;
       // 目标特征增强
       if (target.fire > 3) base *= 1.20;                       // 起火
+      if (N.Weather && target.fire > 3) base *= N.Weather.fireBeacon(world);  // 夜里的火光最扎眼
       if (target.smokeScreen) base *= 1.12;                    // 自身施放烟幕（浓烟）
       if (world.time - target.lastFireTime < 25) base *= 1.35; // 炮口闪光
-      if (env.rain > 0.3) base *= 0.75;
+      if (rain > 0.3) base *= 0.75;
       // 烟幕遮蔽
       if (Sensors.inSmoke(world, target.pos)) base *= 0.30;
       // 观察者自身在烟幕里
       if (Sensors.inSmoke(world, observer.pos)) base *= 0.55;
+      // 别人烧起来的烟挡在你和目标之间
+      base *= Sensors.fireSmokeBlocks(world, observer.pos, target.pos);
 
       if (range < base) {
         visualOk = true;
         // 光学测距误差随距离平方增长；测向误差很小
-        var rangeFrac = 0.02 + 0.06 * U.clamp01(range / Math.max(6000, env.visibility));
+        var rangeFrac = 0.02 + 0.06 * U.clamp01(range / Math.max(6000, vis));
         if (lit) rangeFrac *= 0.6;   // 被照明弹照亮时测距明显更准
         visualObs = {
           posErr: Math.max(90, range * rangeFrac * 0.75 + range * Math.tan(0.8 * U.DEG)),
@@ -117,6 +158,8 @@
         else idLevel = ID.SURFACE;
         // 拂晓/黄昏/雨雾会降低识别能力
         if (env.light === 'dawn' || env.light === 'dusk') idLevel = Math.max(ID.SURFACE, idLevel - 1);
+        // 雨幕里连舰型都分不清
+        if (rain > 0.45) idLevel = Math.max(ID.SURFACE, idLevel - 1);
       }
       if (radarOk && idLevel < ID.SURFACE) idLevel = ID.SURFACE;
 
