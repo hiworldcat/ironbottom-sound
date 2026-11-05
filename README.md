@@ -45,6 +45,8 @@
 | 雨飑过境：能见度 5.5 km，雷达 ×0.45 | 夜战：月光决定能看多远 |
 | ![天气预报](screenshots/shot-weather-brief.png) | ![线上夜战](screenshots/shot-live-weather.png) |
 | 战前简报里的天气预报 | 线上版：夜战，月光 34% |
+| ![设备与损管](screenshots/shot-devices.png) | ![帮助里的设备说明](screenshots/shot-help-damage.png) |
+| 设备与损管：一台主机被毁、舵机 ×3、雷达和识别器故障 | 游戏内帮助新增「设备与损管」 |
 
 ---
 
