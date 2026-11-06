@@ -76,6 +76,9 @@
       var tr = tracks[i];
       if (!tr.pos) continue;
       if (world.time - tr.lastSeen > 300) continue;
+      /* 电探给的只是方位，测不出距离 —— 打不了。AI 也不会拿它当目标，
+         但可以照它那个方向开过去（那一段在 steer 里读航迹，不走这里）。 */
+      if (tr.esmOnly) continue;
       var sc = targetScore(world, ship, tr);
       if (sc > bestScore) { bestScore = sc; best = tr; }
     }

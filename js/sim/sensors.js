@@ -85,8 +85,8 @@
       var range = V.dist(observer.pos, target.pos);
       var bearing = Geo.bearing(observer.pos, target.pos);
 
-      var radarOk = false, visualOk = false;
-      var radarObs = null, visualObs = null;
+      var radarOk = false, visualOk = false, esmOk = false;
+      var radarObs = null, visualObs = null, esmObs = null;
 
       /* ---------------- 雷达 ---------------- */
       var r = observer.cls.radar;
@@ -148,7 +148,32 @@
         };
       }
 
-      if (!radarOk && !visualOk) return null;
+      /* ---------------- 电探（被动雷达告警） ----------------
+       *  只听不发：对方雷达一开机，受信机就能测到它的方位。
+       *  关键在于 —— 测向准，测距基本靠信号强度估，误差极大。
+       *  所以它不会给你一个能开炮的解，只告诉你"那个方向有雷达"。
+       *  美军不知道自己的雷达被听了。 */
+      if (N.Damage && N.Damage.esmOk(observer) && observer.side !== target.side) {
+        // 对方雷达得真的在辐射（被打坏、故障、断电就不辐射了）
+        var tRadarOn = target.cls.radar && (N.Damage ? N.Damage.radarOk(target) : !target.radarDestroyed);
+        if (tRadarOn) {
+          var esmCfg = (N.ESM && N.ESM.config) || { range: 26000, bearingErr: 1.3, rangeFrac: 0.45 };
+          var esmRange = esmCfg.range * (observer.sensorFactor ? observer.sensorFactor() : 1);
+          // 雨幕对雷达波也有衰减，但远小于对光学的影响
+          if (N.Weather) esmRange *= 0.82 + 0.18 * N.Weather.radarFactor(world);
+          if (range < esmRange) {
+            esmOk = true;
+            esmObs = {
+              // 方位很准，距离只能估到 ±45%，两者合成一个很大的圆
+              posErr: Math.max(1800, range * esmCfg.rangeFrac),
+              brgErr: esmCfg.bearingErr,
+              rangeErr: range * esmCfg.rangeFrac
+            };
+          }
+        }
+      }
+
+      if (!radarOk && !visualOk && !esmOk) return null;
 
       /* ---------------- 识别等级 ---------------- */
       var idLevel = ID.NONE;
@@ -163,23 +188,28 @@
         // 雨幕里连舰型都分不清
         if (rain > 0.45) idLevel = Math.max(ID.SURFACE, idLevel - 1);
       }
-      if (radarOk && idLevel < ID.SURFACE) idLevel = ID.SURFACE;
+      if ((radarOk || esmOk) && idLevel < ID.SURFACE) idLevel = ID.SURFACE;
 
       // 优先使用更精确的定位源
       var best = (visualObs && radarObs)
         ? (visualObs.posErr <= radarObs.posErr ? visualObs : radarObs)
-        : (visualObs || radarObs);
+        : (visualObs || radarObs || esmObs);
 
       return {
         range: range,
         bearing: bearing,
         idLevel: idLevel,
-        source: (visualOk && radarOk) ? 'both' : (visualOk ? 'visual' : 'radar'),
+        source: (visualOk && radarOk) ? 'both'
+          : (visualOk ? 'visual'
+            : (radarOk ? 'radar' : 'esm')),
         posErr: best.posErr,
         brgErr: best.brgErr,
         rangeErr: best.rangeErr,
         visual: visualOk,
-        radar: radarOk
+        radar: radarOk,
+        esm: esmOk,
+        // 只有电探看到：方位很准，距离基本靠猜
+        esmOnly: esmOk && !radarOk && !visualOk
       };
     },
 
@@ -235,11 +265,21 @@
           seenBy: observer ? observer.id : null,
           fixes: [],
           seenThisTick: true,
-          source: 'visual'
+          source: obs ? obs.source : 'visual'
         };
       }
 
       if (obs) {
+        /* ---- 电探只是方位：已经有更好的定位时，别让它把位置拽偏 ----
+         * 电探的"位置"是沿方位线猜出来的，误差几公里。如果本舰已经有
+         * 望远镜或雷达的实定位，正确的做法是拿这条方位线去校核，而不是覆盖。 */
+        if (obs.esmOnly && tr.fix && tr.source !== 'esm' && tr.uncertainty < obs.posErr) {
+          tr.esmFix = (tr.esmFix || 0) + 1;
+          tr.uncertainty = Math.max(120, tr.uncertainty * 0.88);
+          tr.esmAt = world.time;
+          return tr;
+        }
+
         // ---- 有观测：更新位置（带误差） ----
         var errPos = Geo.dest(tgt.pos, obs.bearing + rng.dev(obs.brgErr), rng.dev(obs.posErr));
         tr.pos = errPos;
@@ -249,6 +289,9 @@
         tr.seenBy = observer ? observer.id : tr.seenBy;
         tr.seenThisTick = true;
         tr.source = obs.source;
+        tr.esmOnly = !!obs.esmOnly;
+        // 定解点：本舰自己的观测是即时的，t 就是现在
+        tr.fix = { x: errPos.x, y: errPos.y, t: world.time, err: Math.max(120, obs.posErr) };
 
         // ---- 识别 ----
         if (obs.idLevel > tr.idLevel) {
@@ -281,14 +324,22 @@
           }
         }
       } else {
-        // ---- 无观测：按估算航向外推 ----
+        // ---- 无观测：从定解点按估算航向外推 ----
         tr.seenThisTick = false;
         var gap = world.time - tr.lastSeen;
         if (gap > 900) { delete map[tgt.id]; return null; }
-        var v = Geo.headingVec(tr.course);
-        var step = tr.speed * U.KNOT_MS * dt;
-        tr.pos = { x: tr.pos.x + v.x * step, y: tr.pos.y + v.y * step };
-        tr.uncertainty = Math.min(9000, tr.uncertainty + 55 * dt);
+        if (tr.fix) {
+          var v = Geo.headingVec(tr.course);
+          var step = tr.speed * U.KNOT_MS * (world.time - tr.fix.t);
+          tr.pos = { x: tr.fix.x + v.x * step, y: tr.fix.y + v.y * step };
+          var drift = (6 + tr.speed * U.KNOT_MS * 0.35) * (world.time - tr.fix.t);
+          tr.uncertainty = Math.min(9000, Math.sqrt(tr.fix.err * tr.fix.err + drift * drift));
+        } else {
+          var v2 = Geo.headingVec(tr.course);
+          var step2 = tr.speed * U.KNOT_MS * dt;
+          tr.pos = { x: tr.pos.x + v2.x * step2, y: tr.pos.y + v2.y * step2 };
+          tr.uncertainty = Math.min(9000, tr.uncertainty + 55 * dt);
+        }
       }
       return tr;
     },
@@ -338,6 +389,27 @@
     return '舰艇';
   }
   Sensors.typeName = typeName;
+
+  /* ==========================================================================
+   *  电探（被动雷达告警）
+   *
+   *  日军把"电波探知機"装在少数旗舰和巡洋舰上，用来听美军雷达的辐射。
+   *  它只听不发 —— 美军那边没有任何提示，雷达照开，直到炮弹落下来。
+   *
+   *  这也意味着：它测得到方位，测不到距离。给了日舰"那个方向有美国人"，
+   *  但给不了射击诸元。真正值钱的是夜战里提前几十秒知道对面来了。
+   * ========================================================================== */
+  N.ESM = {
+    config: {
+      range: 26000,        // 被动接收距离（米），比美军雷达自己的作用距离还远一点
+      bearingErr: 1.3,     // 测向误差（度）
+      rangeFrac: 0.45      // 测距误差：信号强度估距，只能到这个量级
+    },
+    /** 这条舰装没装电探 */
+    fitted: function (ship) {
+      return !!(ship && ship.hasESM && N.Damage && N.Damage.esmOk(ship));
+    }
+  };
 
   N.Sensors = Sensors;
 })(globalThis.Naval = globalThis.Naval || {});

@@ -55,6 +55,10 @@
     this.radioDestroyed = false;   // 收发机被打掉：视距外的报告和命令全断
     this.iffDestroyed = false;     // 敌我识别器被打掉：只能靠目视判别
 
+    /* ---- 电探受信机（被动雷达告警）：只有剧本点名的少数日舰装了 ---- */
+    this.hasESM = !!def.esm;
+    this.esmDestroyed = false;
+
     /* ---- 结构分区 ----------------------------------------------------
        一艘舰的结构拆成五块，各有各的血条。hull 就是上面那条主血条，
        另外四块（上层/武器/通信/动力）的满值按结构比例从 hull 换算：
@@ -683,24 +687,26 @@
       return;
     }
 
-    var dc = this.cls.damageControl;
+    /* 损管档位：美军组织、器材、训练都强一档，日军明显弱（damage.js 里定义） */
+    var prof = N.Damage ? N.Damage.profile(this)
+      : { flood: 1, fire: 1, list: 1, magazine: 1 };
 
-    /* 进水 */
+    /* 进水：缺口进水 × 损管档位（档位低 = 进得快） */
     if (this.floodRate > 0) {
-      this.flood = Math.min(140, this.flood + this.floodRate * dt * dc);
-      // 损管逐步堵漏
-      this.floodRate = Math.max(0, this.floodRate - 0.0025 * dt * dc);
+      this.flood = Math.min(140, this.flood + this.floodRate * dt * prof.flood);
+      // 损管逐步堵漏 —— 这一项是"档位高 = 堵得快"
+      this.floodRate = Math.max(0, this.floodRate - 0.0025 * dt * prof.fire);
     }
     // 大量进水导致横倾，进一步恶化
-    if (this.flood > 55) this.list = Math.min(30, this.list + 0.15 * dt);
+    if (this.flood > 55) this.list = Math.min(30, this.list + 0.15 * dt * prof.list);
 
     /* 火灾 */
     if (this.fire > 0) {
       this.hull = Math.max(0, this.hull - this.fire * 0.0035 * dt);
-      this.fire = Math.max(0, this.fire - 0.55 * dc * dt);
-      // 弹药库殉爆
+      this.fire = Math.max(0, this.fire - 0.55 * prof.fire * dt);
+      // 弹药库殉爆（日军损管差，火势更容易失控）
       if (this.fire > 55) {
-        var p = (this.fire - 55) / 45 * 0.00022 * dt;
+        var p = (this.fire - 55) / 45 * 0.00022 * dt * prof.magazine;
         if (world.rng.chance(p)) {
           this.hull = 0;
           world.log(this.side, '💥 ' + this.name + ' 弹药库殉爆！', 'critical');

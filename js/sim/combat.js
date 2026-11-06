@@ -71,6 +71,8 @@
     // 火控用本舰自己看得见的那份（即时）；指挥舰发下来的态势可能已经旧了
     var track = N.Sensors.trackFor(world, ship, ship.targetTrackId);
     if (!track) return;
+    // 电探只给方位，没有距离就解不出射击诸元 —— 打不了
+    if (track.esmOnly) return;
 
     var sol = computeSolution(world, ship, track);
     ship.solution = sol;

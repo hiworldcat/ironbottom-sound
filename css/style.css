@@ -673,6 +673,22 @@ kbd {
 .contact-item .ci-name { font-weight: 600; color: var(--amber); min-width: 62px; }
 .contact-item.identified .ci-name { color: var(--red); }
 .contact-item .ci-meta { font-family: var(--mono); font-size: 10px; color: var(--dim); flex: 1; }
+
+/* 接触来源徽章：雷达 / 目视 / 电探（仅方位） */
+.contact-item .ci-name { display: flex; align-items: center; gap: 5px; }
+.ci-src {
+  font-family: var(--mono); font-size: 9px; font-weight: 400;
+  padding: 0 4px; border-radius: 2px; line-height: 14px;
+  color: var(--dim); border: 1px solid rgba(255, 255, 255, 0.14);
+  white-space: nowrap;
+}
+.ci-src.src-radar { color: #7fd4ff; border-color: rgba(127, 212, 255, 0.4); }
+.ci-src.src-both { color: #8ef0b0; border-color: rgba(142, 240, 176, 0.4); }
+.ci-src.src-visual { color: var(--amber); border-color: rgba(255, 193, 92, 0.4); }
+.ci-src.src-esm {
+  color: #d9a6ff; border-color: rgba(217, 166, 255, 0.45);
+  background: rgba(217, 166, 255, 0.08);
+}
 .contact-empty { color: var(--dim2); font-size: 11px; padding: 14px 8px; text-align: center; }
 
 /* ------------------------------------------------------------------ 遮罩 */

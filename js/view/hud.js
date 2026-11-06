@@ -639,6 +639,12 @@
       ['电台', dv ? dv.radio : D.radioOk(ship), dv ? false : ship.radioDestroyed],
       ['识别器', dv ? dv.iff : D.iffOk(ship), dv ? false : ship.iffDestroyed]
     ];
+    /* 电探：只有装了它的船才有这一行，美军从头到尾没有 */
+    var hasESM = dv ? dv.hasESM : !!ship.hasESM;
+    if (hasESM) {
+      var esmDead = dv ? !!dv.esmDestroyed : !!ship.esmDestroyed;
+      devs.push(['电探', dv ? dv.esm : D.esmOk(ship), dv ? false : esmDead]);
+    }
     var faultShorts = dv ? (dv.faults || []) : D.faults(ship).map(function (f) { return f.short; });
     var deadShorts = dv ? (dv.dead || []) : D.destroyedList(ship).map(function (d) { return d.short; });
     for (i = 0; i < devs.length; i++) {
@@ -660,6 +666,15 @@
       var healT = Math.max(0, D.DC_INTERVAL - (ship._healT || 0));
       var mm = Math.floor(healT / 60), ss = Math.round(healT % 60);
       rows.push(['损管', '下次抢修 ' + mm + '分' + (ss < 10 ? '0' : '') + ss + '秒', 'ok']);
+    }
+
+    /* 损管档位：美军组织器材都强一档，日军明显弱 —— 这是两国海军最实在的差距之一 */
+    if (D.profile) {
+      var pf = D.profile(ship);
+      var grade = pf.fire >= 1.3 ? '优' : (pf.fire >= 1.0 ? '良' : '差');
+      var gcls = pf.fire >= 1.3 ? 'ok' : (pf.fire >= 1.0 ? 'ok' : 'warn');
+      rows.push(['损管水平', grade + '（进水 ×' + pf.flood.toFixed(2) +
+        ' · 灭火 ×' + pf.fire.toFixed(2) + '）', gcls]);
     }
 
     var html = '';
@@ -1159,10 +1174,24 @@
       if (tr.idLevel >= N.Sensors.ID.TYPE) cls += ' identified';
       if (this.game.selectedTrackId === tr.id) cls += ' selected';
       var stale = world.time - tr.lastSeen > 45;
+
+      /* 这个接触是怎么来的、有多旧、圈有多大 —— 这三件事比舰名重要 */
+      var age = Math.round(tr.age != null ? tr.age : (world.time - (tr.lastSeen || 0)));
+      var err = Math.round(tr.uncertainty || 0);
+      var srcMap = { radar: '雷达', visual: '目视', both: '雷达+目视', esm: '电探' };
+      var src = tr.esmOnly ? '电探·仅方位' : (srcMap[tr.source] || '');
+      var name = tr.esmOnly ? '雷达辐射源' : N.Sensors.idText(tr);
+
+      var meta = Math.round(brg) + '° ' + U.fmtRange(dist) +
+        ' · ±' + (err >= 1000 ? (err / 1000).toFixed(1) + 'km' : err + 'm') +
+        (age >= 3 ? ' · ' + age + 's前' : '') +
+        (stale ? ' · 陈旧' : '');
+
       html += '<div class="' + cls + '" data-id="' + tr.id + '">' +
-        '<span class="ci-name">' + N.Sensors.idText(tr) + '</span>' +
-        '<span class="ci-meta">' + Math.round(brg) + '° ' + U.fmtRange(dist) +
-        (stale ? ' · 陈旧' : '') + '</span></div>';
+        '<span class="ci-name">' + name +
+        (src ? '<span class="ci-src src-' + (tr.esmOnly ? 'esm' : (tr.source || 'x')) + '">' + src + '</span>' : '') +
+        '</span>' +
+        '<span class="ci-meta">' + meta + '</span></div>';
     }
     this.el.contacts.innerHTML = html;
   };
@@ -1744,6 +1773,24 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span>夜间、雾雨、海况差都会<b>提高丢包率</b>（延迟不变），干扰可叠加；左栏「链路」写着当前丢包率</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>敌我识别器有 <b>1%</b> 概率认错；<b>电台</b>或<b>识别器</b>被炮弹打掉就彻底不能用了</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>指挥舰被打沉会<b>指挥中断</b>几十秒，然后由下一艘大舰接替</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>态势融合与误差传递</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>同一艘敌舰往往同时有雷达、瞭望、隔壁舰好几份报告。<b>它们会被加权融合</b>，不是谁后到听谁的 —— 误差小的那份说了算，融合后的圈一定比单份小</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>每条接触都标着<b>来源</b>（<b>雷达</b>／<b>目视</b>／<b>雷达+目视</b>／<b>电探</b>）、<b>±误差</b>和<b>多少秒前的定解</b>。这三个数字比舰名重要</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>报告在路上走多久，图上那个圈就涨多大：<b>晚 1 分钟约 ±800 m，晚 2 分半约 ±1.6 km</b>。延迟越久，越打不准 —— 这条链路以前是断的，现在通了</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>圈涨的速度和目标航速有关：对面 30 节跑，你图上那个点漂得比 15 节快一倍</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>这套东西<b>美军日军一模一样</b>：日军也有延迟、也会丢包、图上也会漂</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>电探（仅日军、仅部分舰）</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>少数日舰（<b>妙高、羽黑、金刚、神通、雪风、浜风、村雨、新月、长月、高波、长波、大波、卷波</b>等）装了<b>电探受信机</b>，能被动听到美军雷达的辐射</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>它<b>只听不发</b>，作用距离比美军雷达自己还远，但<b>只测得到方向，测不到距离</b> —— 接触会标成「雷达辐射源 · 仅方位」，圈有 2~4 km，<b>给不了射击诸元</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>如果这艘日舰本来就有雷达或目视定位，电探只当一次<b>方位校核</b>，把圈压小一点，不会把位置拽偏</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>美军完全不知道</b>：雷达照开，没有任何提示，也没有任何反制手段。这是单向透明的</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>电探挂在<b>通讯区</b>里，通讯区打光、电力失灵、或者设备本身故障，它就聋了</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>两国损管的差距</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>美军损管强</b>：专门的损管队、独立电话回路、便携电动泵、泡沫灭火、会主动反注水纠正横倾。进水 ×0.72、灭火 ×1.42、殉爆 ×0.45</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>日军损管弱</b>：损管由当值军官兼管，泵排量不够，水密门形同虚设，基本不做反注水。进水 ×1.24、灭火 ×0.80、殉爆 ×1.55</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>横倾一旦起来，日军恶化得快一倍多 —— 加古、古鹰都是这么翻的</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>九三式氧气鱼雷</b>：日舰的鱼雷发射管被击毁时，有 <b>26%</b> 概率管内氧气和 490 kg 战斗部一起炸（美军只有 6%）。这一下经常直接把船送走</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>损管水平也影响<b>设备故障率</b>和<b>抢修速度</b>：美军平时故障率约 0.85%，日军约 1.7%。详情面板「损管水平」一栏写着当前舰的档位</span></div>' +
       '<div class="obj-head" style="margin-top:12px"><span>气象</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>风、浪、雨、云、月光<b>每场都不一样，而且一直在变</b>（顶栏三条：能见度 / 风与海况 / 月光）</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>瞭望哨</b>：雨和雾压能见度，夜里月光越暗看得越近，阴天会把月光遮掉；满月夜能比新月夜多看四成</span></div>' +
@@ -1756,13 +1803,13 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span>详情面板的「结构分区」按<b>三大系统</b>显示：<b>船体结构</b>（打光就沉）、<b>上层结构</b>（武器 + 通讯 + 其他）、<b>动力系统</b>（发动机 + 舵机 + 电力）</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>子条各算各的：打武器区、打通讯区，上层结构那一行跟着掉；掉一台主机、打坏舵机、电力故障，动力系统那一行跟着掉</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>每艘舰拆成<b>具体设备</b>：每座炮塔、每个鱼雷发射管、雷达、电台、敌我识别器、每台主机、舵机、电力系统，各自有血条</span></div>' +
-      '<div class="obj-item"><span class="ob-mark">·</span><span><b>故障</b>是自己坏的：每 5 分钟 <b>1%</b>，修好也是每 5 分钟 <b>10%</b>。<b>开火</b>时故障率 +2%、修复率 −4%；<b>全速</b>时 +1% / −2%</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>故障</b>是自己坏的：每 5 分钟约 <b>1%</b>，修好也是每 5 分钟 <b>10%</b>。<b>开火</b>时故障率 +2%、修复率 −4%；<b>全速</b>时 +1% / −2%（实际数值按损管档位缩放）</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>近失弹</b>：落在舷侧几十米内的炮弹会撕开船壳、造成进水。口径越大杀伤半径越远（八英寸约 22 米）；自己打的齐射有近失时，火控修正比纯打偏快，面板会写「近失 3」</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>损坏</b>是别人打的（炮弹、鱼雷、近失弹、起火），<b>修不好</b>。武器区、通讯区、动力区打光了，里面挂着的设备跟着全毁</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>主机每坏一档就掉动力：血条 &lt;100% 掉 25%，&lt;75% 掉 50%，&lt;50% 掉 90%；<b>故障</b>再叠 25/50/75%。故障和损坏<b>可以叠加</b></span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>舵机</b>：血条 &lt;100% 转向时间 ×2，&lt;75% ×3，&lt;50% ×5；舵机<b>卡死</b>再 ×2。舵机故障只在全速时才容易出</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>电力系统</b>一失灵，雷达、电台、识别器全停，无线电延迟 +1 分钟，炮击间隔 ×1.5，鱼雷装填 ×2，识别错误率 +1%；动力系统掉到 25% 以下也会连带失灵</span></div>' +
-      '<div class="obj-item"><span class="ob-mark">·</span><span><b>损管</b>每 10 分钟给船体和上层建筑各回 <b>5%</b> 血（开火 −2%、全速 −1%）；武器、通信、动力它修不了</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>损管</b>每 10 分钟给船体和上层建筑回血，回多少看<b>损管档位</b>（美军约 7%，日军约 4%；开火 −2%、全速 −1%）；武器、通信、动力它修不了</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>详情面板的「设备与损管」一栏实时显示主机、舵机、电力、雷达、电台、识别器、火控的状态和下次抢修倒计时</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +

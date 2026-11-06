@@ -1243,7 +1243,7 @@ function testDamage() {
   if (!D.elecFailed(s)) problems.push('设备自检: 动力不足 25% 时电力系统没有失灵');
   s.zone.power = powerSave;
 
-  /* 7) 损管：每 10 分钟给船体和上层回 5%，不动武器/通信/动力 */
+  /* 7) 损管：每 10 分钟按损管档位给船体和上层回血，不动武器/通信/动力 */
   s.hull = s.hullMax * 0.5;
   s.zone.superstructure = s.zoneMax.superstructure * 0.5;
   const hull0 = s.hull, super0 = s.zone.superstructure;
@@ -1254,14 +1254,42 @@ function testDamage() {
   s._healT = 0;
   D.update(s, 600, w);
   const dh = s.hull - hull0, ds = s.zone.superstructure - super0;
-  if (Math.abs(dh - s.hullMax * 0.05) > 0.05) {
-    problems.push(`设备自检: 损管 10 分钟给船体回了 ${dh.toFixed(2)}，应为 ${(s.hullMax * 0.05).toFixed(2)}`);
+  const healMul = D.profile(s).fire;
+  const wantHull = s.hullMax * 0.05 * healMul;
+  const wantSuper = s.zoneMax.superstructure * 0.05 * healMul;
+  if (Math.abs(dh - wantHull) > 0.05) {
+    problems.push(`设备自检: 损管 10 分钟给船体回了 ${dh.toFixed(2)}，应为 ${wantHull.toFixed(2)}`);
   }
-  if (Math.abs(ds - s.zoneMax.superstructure * 0.05) > 0.05) {
-    problems.push(`设备自检: 损管 10 分钟给上层回了 ${ds.toFixed(2)}，` +
-      `应为 ${(s.zoneMax.superstructure * 0.05).toFixed(2)}`);
+  if (Math.abs(ds - wantSuper) > 0.05) {
+    problems.push(`设备自检: 损管 10 分钟给上层回了 ${ds.toFixed(2)}，应为 ${wantSuper.toFixed(2)}`);
   }
   if (s.zone.weapons > weap0 || s.zone.power > pow0) problems.push('设备自检: 损管修了不该修的地方');
+
+  /* 7b) 损管档位：美军必须明显强于日军（进水慢、灭火快、抢修快、殉爆少） */
+  {
+    const usShip = w.ships.find(x => x.side === 'US');
+    const jpShip = w.ships.find(x => x.side === 'JP');
+    const pu = D.profile(usShip), pj = D.profile(jpShip);
+    if (!(pj.flood > pu.flood * 1.2)) {
+      problems.push(`设备自检: 日军进水倍率 ${pj.flood.toFixed(2)} 没有明显高于美军 ${pu.flood.toFixed(2)}`);
+    }
+    if (!(pu.fire > pj.fire * 1.2)) {
+      problems.push(`设备自检: 美军灭火倍率 ${pu.fire.toFixed(2)} 没有明显高于日军 ${pj.fire.toFixed(2)}`);
+    }
+    if (!(pj.magazine > pu.magazine * 1.5)) {
+      problems.push(`设备自检: 日军殉爆倍率 ${pj.magazine.toFixed(2)} 没有明显高于美军 ${pu.magazine.toFixed(2)}`);
+    }
+    // 同样的进水缺口，跑 10 分钟后日军进的水必须更多
+    const floodRun = (ship) => {
+      ship.flood = 0; ship.floodRate = 0.02; ship.fire = 0; ship.list = 0;
+      for (let i = 0; i < 600; i++) ship.updateDamage(1, w);
+      return ship.flood;
+    };
+    const fu = floodRun(usShip), fj = floodRun(jpShip);
+    if (!(fj > fu * 1.15)) {
+      problems.push(`设备自检: 同样进水缺口，日军进 ${fj.toFixed(1)} 不多于美军 ${fu.toFixed(1)}`);
+    }
+  }
 
   /* 8) 打坏的设备修不好（不可逆） */
   const m0 = s.mounts[0];
@@ -1272,7 +1300,7 @@ function testDamage() {
   }
   if (!m0.disabled || m0.hp > 0) problems.push('设备自检: 被打毁的炮塔被损管修好了');
 
-  /* 9) 故障率：平时 1%，开火时 3% */
+  /* 9) 故障率：平时 1% 上下，开火时更高（具体数值按损管档位缩放） */
   const g = new N.World(N.Scenarios.get('savo_melee'), { seed: 9 });
   const t = g.ships.find(x => x.side === 'US' && x.cls.type === 'CA');
   const rateOf = (firing) => {

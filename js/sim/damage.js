@@ -61,6 +61,52 @@
   };
 
   /* ====================================================================== */
+  /*  损管档位：美军 vs 日军                                                 */
+  /* ====================================================================== */
+
+  /**
+   * 二战两国损管的真实差距，主要不是"水兵不怕死"，而是三件事：
+   *
+   *   1. 组织 —— 美军 1942 年后在每条船上编了专门的损管队（DCA），
+   *      有独立电话回路、标图板、预制堵漏器材；日军损管由当值军官兼管，
+   *      战斗一乱就没人统一指挥。
+   *   2. 器材 —— 美军有便携电动泵、泡沫灭火、可快速关闭的水密门；
+   *      日军很多舰的水密门形同虚设，泵的排量也不够。
+   *   3. 反注水 —— 美军会主动向对侧注水纠正横倾；日军基本不做，
+   *      一旦横倾就恶性循环（"加古"、"古鹰"都是这么翻的）。
+   *
+   * 数值是"相对美军标准舰"的倍率：
+   *   flood    缺口进水倍率（<1 = 进得慢，损管好）
+   *   fire     灭火 / 堵漏 / 抢修速度倍率（>1 = 快）
+   *   list     横倾恶化倍率
+   *   magazine 弹药库殉爆概率倍率
+   *   torpedo  鱼雷发射管被击毁时诱爆的概率（九三式氧气鱼雷的锅）
+   */
+  var DC_PROFILE = {
+    US: { flood: 0.72, fire: 1.42, list: 0.62, magazine: 0.45, torpedo: 0.06, fault: 0.85 },
+    JP: { flood: 1.24, fire: 0.80, list: 1.38, magazine: 1.55, torpedo: 0.26, fault: 1.55 }
+  };
+
+  /**
+   * 一条舰的实际损管倍率 = 阵营档位 × 舰级系数。
+   * cls.damageControl 是老数据（1.0 = 标准，越大越好），这里统一成"越大越好"的语义。
+   */
+  function profile(ship) {
+    var base = DC_PROFILE[ship.side] || DC_PROFILE.US;
+    var k = ship.cls && ship.cls.damageControl ? ship.cls.damageControl : 1;
+    return {
+      flood: base.flood / k,
+      fire: base.fire * k,
+      list: base.list / k,
+      magazine: base.magazine / k,
+      torpedo: base.torpedo,
+      // 设备故障率倍率：损管好的船维护也好，坏得少
+      fault: base.fault / k,
+      side: ship.side
+    };
+  }
+
+  /* ====================================================================== */
   /*  建表                                                                  */
   /* ====================================================================== */
 
@@ -124,8 +170,9 @@
       faulted: false, destroyed: false
     };
 
-    /* ---- 上层建筑：武器（炮塔 / 鱼雷管）+ 通讯（雷达 / 电台 / 识别器） ---- */
+    /* ---- 上层建筑：武器（炮塔 / 鱼雷管）+ 通讯（雷达 / 电台 / 识别器 / 电探） ---- */
     var weaponW = {}, commW = { radar: 1.0, radio: 0.7, iff: 0.5 };
+    if (ship.hasESM) commW.esm = 0.38;
     ship.mounts.forEach(function (m, k) { weaponW['m' + k] = 1.6; });
     ship.torps.forEach(function (t, k) { weaponW['t' + k] = 1.0; });
     var whp = shareHP(ship.zoneMax.weapons, weaponW);
@@ -192,6 +239,21 @@
       get fault() { return ship.iffDev.faulted; }, set fault(v) { ship.iffDev.faulted = v; },
       get destroyed() { return ship.iffDestroyed; }
     });
+
+    /* 电探受信机：只监听，不发射。美军雷达一开机它就能测到方向，
+       但测不到距离 —— 这是它和雷达最大的区别，也是它最要命的地方。 */
+    ship.esmDev = null;
+    if (ship.hasESM) {
+      ship.esmDev = { hpMax: chp.esm, hp: ship.esmDestroyed ? 0 : chp.esm, faulted: false };
+      ship.devList.push({
+        kind: 'esm', group: 'comms', obj: ship.esmDev,
+        name: '电探受信机', short: '电探',
+        get hp() { return ship.esmDev.hp; }, set hp(v) { ship.esmDev.hp = v; },
+        get hpMax() { return ship.esmDev.hpMax; },
+        get fault() { return ship.esmDev.faulted; }, set fault(v) { ship.esmDev.faulted = v; },
+        get destroyed() { return ship.esmDestroyed; }
+      });
+    }
 
     /* ---- 计时器 ---- */
     ship._faultT = 0;
@@ -286,12 +348,30 @@
       o.disabled = true; o.ready = false; o.destroyed = true; o.hp = 0;
     } else if (d.kind === 'torp') {
       o.disabled = true; o.destroyed = true; o.hp = 0;
+      /* 九三式氧气鱼雷：发射管被击毁时，管内的纯氧和 490 kg 战斗部会一起炸。
+         日军自己的记录里，好几艘巡洋舰就是这么被自己的鱼雷送走的。 */
+      var prof = profile(ship);
+      if (world && world.rng && world.rng.chance(prof.torpedo)) {
+        var k = ship.hullMax * 0.16;
+        ship.hull = Math.max(0, ship.hull - k);
+        ship.flood = Math.min(140, ship.flood + 14);
+        ship.fire = Math.min(100, ship.fire + 22);
+        ship.floodRate += 0.006;
+        if (world.log) {
+          world.log(ship.side, '💥💥 ' + ship.name + ' 的' + d.name + '被击中，管内氧气鱼雷诱爆！', 'critical');
+        }
+      } else if (world && world.log) {
+        world.log(ship.side, '💥 ' + ship.name + ' 的' + d.name + '被击毁', 'critical');
+      }
+      return;
     } else if (d.kind === 'radar') {
       ship.radarDestroyed = true; o.hp = 0;
     } else if (d.kind === 'radio') {
       ship.radioDestroyed = true; o.hp = 0;
     } else if (d.kind === 'iff') {
       ship.iffDestroyed = true; o.hp = 0;
+    } else if (d.kind === 'esm') {
+      ship.esmDestroyed = true; o.hp = 0;
     } else {
       o.hp = 0; o.destroyed = true;
     }
@@ -395,20 +475,23 @@
     var firing = isFiring(ship, world);
     var full = isFullSpeed(ship);
     var i, d, p;
+    // 损管好的船：故障少、修得快
+    var prof = profile(ship);
+    var faultMul = prof.fault;
 
-    /* ---- 技术设备：雷达 / 电台 / 识别器 / 炮塔 / 鱼雷管 ---- */
+    /* ---- 技术设备：雷达 / 电台 / 识别器 / 电探 / 炮塔 / 鱼雷管 ---- */
     var tech = ship.devList;
     for (i = 0; i < tech.length; i++) {
       d = tech[i];
       if (d.destroyed) continue;
       if (d.fault) {
-        p = P.repair - (firing ? P.firingRepair : 0) - (full ? P.fullRepair : 0);
+        p = (P.repair - (firing ? P.firingRepair : 0) - (full ? P.fullRepair : 0)) * prof.fire;
         if (p > 0 && rng.chance(p)) {
           d.fault = false;
           logFault(ship, world, '🔧 ' + ship.name + ' 的' + d.name + '修好了', 'info');
         }
       } else {
-        p = P.fault + (firing ? P.firingFault : 0) + (full ? P.fullFault : 0);
+        p = (P.fault + (firing ? P.firingFault : 0) + (full ? P.fullFault : 0)) * faultMul;
         if (rng.chance(p)) {
           d.fault = true;
           logFault(ship, world, '⚠ ' + ship.name + ' 的' + d.name + '故障', 'warn');
@@ -421,7 +504,7 @@
       var e = ship.engines[i];
       if (e.destroyed) continue;
       if (e.faulted) {
-        p = P.repair - (firing ? P.engFiringRepair : 0) - (full ? P.engFullRepair : 0);
+        p = (P.repair - (firing ? P.engFiringRepair : 0) - (full ? P.engFullRepair : 0)) * prof.fire;
         if (p > 0 && rng.chance(p)) {
           var fix = P.engSteps[rng.int(0, 2)];
           e.faultLoss = Math.max(0, e.faultLoss - fix);
@@ -433,7 +516,7 @@
           }
         }
       } else {
-        p = P.fault + (firing ? P.engFiringFault : 0) + (full ? P.engFullFault : 0);
+        p = (P.fault + (firing ? P.engFiringFault : 0) + (full ? P.engFullFault : 0)) * faultMul;
         if (rng.chance(p)) {
           e.faulted = true;
           var lose = P.engSteps[rng.int(0, 2)];
@@ -447,11 +530,11 @@
     var rd = ship.rudder;
     if (rd && !rd.destroyed) {
       if (rd.faulted) {
-        if (rng.chance(P.repair)) {
+        if (rng.chance(P.repair * prof.fire)) {
           rd.faulted = false;
           logFault(ship, world, '🔧 ' + ship.name + ' 的舵机修好了', 'info');
         }
-      } else if (full && rng.chance(P.fault)) {
+      } else if (full && rng.chance(P.fault * faultMul)) {
         rd.faulted = true;
         logFault(ship, world, '⚠ ' + ship.name + ' 舵机卡死，转向明显变慢', 'warn');
       }
@@ -461,13 +544,13 @@
     var el = ship.electrical;
     if (el && !el.destroyed) {
       if (el.faulted) {
-        p = P.repair - (firing ? P.elecFiringRepair : 0);
+        p = (P.repair - (firing ? P.elecFiringRepair : 0)) * prof.fire;
         if (p > 0 && rng.chance(p)) {
           el.faulted = false;
           logFault(ship, world, '🔧 ' + ship.name + ' 电力系统恢复', 'info');
         }
       } else {
-        p = P.fault + (firing ? P.elecFiringFault : 0);
+        p = (P.fault + (firing ? P.elecFiringFault : 0)) * faultMul;
         if (rng.chance(p)) {
           el.faulted = true;
           logFault(ship, world, '⚠ ' + ship.name + ' 电力系统失灵：雷达、无线电、火控全受影响', 'critical');
@@ -484,7 +567,8 @@
     if (ship.sunk || ship.sinking) return;
     var firing = isFiring(ship, world);
     var full = isFullSpeed(ship);
-    var heal = P.dcHeal - (firing ? P.dcFiring : 0) - (full ? P.dcFull : 0);
+    var prof = profile(ship);
+    var heal = (P.dcHeal - (firing ? P.dcFiring : 0) - (full ? P.dcFull : 0)) * prof.fire;
     if (heal <= 0) return;
 
     var did = false;
@@ -582,6 +666,15 @@
   function radioOk(ship) {
     if (ship.radioDestroyed) return false;
     if (ship.radioDev && ship.radioDev.faulted) return false;
+    return !elecFailed(ship);
+  }
+
+  /** 电探受信机能不能用：没装、被打掉、故障、断电都不行 */
+  function esmOk(ship) {
+    if (!ship || !ship.hasESM || !ship.esmDev) return false;
+    if (ship.esmDestroyed) return false;
+    if (ship.esmDev.hp <= 0) return false;
+    if (ship.esmDev.faulted) return false;
     return !elecFailed(ship);
   }
 
@@ -718,12 +811,15 @@
     routeDamage: routeDamage,
   syncZone: syncZone,
     onZoneLost: onZoneLost,
+    profile: profile,
+    DC_PROFILE: DC_PROFILE,
     propulsion: propulsion,
     turnFactor: turnFactor,
     elecFailed: elecFailed,
     radarOk: radarOk,
     iffOk: iffOk,
     radioOk: radioOk,
+    esmOk: esmOk,
     radioDelayBonus: radioDelayBonus,
     iffError: iffError,
     gunRate: gunRate,

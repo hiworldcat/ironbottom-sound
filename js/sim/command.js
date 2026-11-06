@@ -243,6 +243,10 @@
       radar: D ? D.radarOk(ship) : !ship.radarDestroyed,
       radio: D ? D.radioOk(ship) : !ship.radioDestroyed,
       iff: D ? D.iffOk(ship) : !ship.iffDestroyed,
+      // 电探只有装了的那几条船才有这一栏
+      hasESM: !!ship.hasESM,
+      esm: D ? D.esmOk(ship) : false,
+      esmDestroyed: !!ship.esmDestroyed,
       fc: !ship.fcDestroyed,
       faults: D ? D.faults(ship).map(function (f) { return f.short; }) : [],
       dead: D ? D.destroyedList(ship).map(function (d) { return d.short; }) : []
@@ -272,6 +276,9 @@
       heading: ship.heading,
       pos: exact ? { x: ship.pos.x, y: ship.pos.y } : { x: ship.pos.x + err.x, y: ship.pos.y + err.y },
       posErr: posErr,
+      // true = 指挥舰自己直接看到的（精确）；false = 靠无线电报来的（有定位误差 + 延迟）
+      exact: !!exact,
+      reportedAt: world.time,
       engage: !!ship.engage,
       targetTrackId: ship.targetTrackId || null,
       torps: ship.torps ? ship.torps.reduce(function (a, t) { return a + (t.loaded || 0); }, 0) : 0,
@@ -316,9 +323,14 @@
       for (var k in own) {
         var tr = own[k];
         if (world.time - tr.lastSeen > 20) continue;
+        /* 发出去的是"定解点"而不是当前外推点：
+           定解点 = 最后一次真正看见它时算出来的位置（tr.fix），
+           收报方自己按航向航速往前推。这样延迟多久，误差就涨多少。 */
+        var fx = tr.fix || { x: tr.pos.x, y: tr.pos.y, t: tr.lastSeen, err: tr.uncertainty };
         obs.push({
           id: tr.id,
-          pos: { x: tr.pos.x, y: tr.pos.y },
+          pos: { x: fx.x, y: fx.y },
+          posErr: fx.err,
           course: tr.course,
           speed: tr.speed,
           uncertainty: tr.uncertainty,
@@ -328,7 +340,8 @@
           nameGuess: tr.nameGuess,
           misId: tr.misId,
           source: tr.source,
-          observedAt: tr.lastSeen
+          esmOnly: !!tr.esmOnly,
+          observedAt: fx.t
         });
       }
       if (!obs.length) continue;
@@ -405,38 +418,125 @@
    *  送达
    * ========================================================================== */
 
+  /* ==========================================================================
+   *  送达与融合
+   *
+   *  以前是"后到的报告直接覆盖前面的"。真实情况不是这样：指挥舰的态势图
+   *  上同一个目标可能同时有雷达的、瞭望的、隔壁舰报来的好几份位置，参谋
+   *  要做的是把它们**融合**成一个点，而不是谁后到听谁的。
+   *
+   *  融合规则（按逆方差加权）：
+   *
+   *    1. 先把图上现有的定解点，用估算航向航速外推到"这次观测发生的时刻"。
+   *       注意是观测时刻，不是现在 —— 新旧两个位置必须对齐到同一时刻才能比。
+   *    2. 两个位置按 1/误差² 加权平均：误差小的那份说了算。
+   *    3. 融合后的误差 = 1/√(1/e旧² + 1/e新²)，一定小于两者中任何一个。
+   *    4. 但这份报告在路上走了 age 秒，这 age 秒里目标又走了，
+   *       所以从定解点外推到"现在"时，误差要按漂移率累加 —— 这就是延迟的误差传递。
+   *
+   *  延迟越久 → 外推越远 → 误差越大 → 图上那个圈越大 → 越打不准。
+   *  这条链路以前是断的：报告晚到 60 秒，图上的点还停在 60 秒前，圈也不变。
+   * ========================================================================== */
+
+  /** 外推漂移率（米/秒）：航向估不准 + 航速估不准 + 对方随时可能转向 */
+  function driftRate(tr) {
+    var spd = (tr.speed || 0) * U.KNOT_MS;
+    return 6 + spd * 0.35;
+  }
+
+  /** 把一条航迹的定解点外推到 t 时刻 */
+  function predictAt(tr, t) {
+    var fx = tr.fix;
+    if (!fx) return { x: tr.pos.x, y: tr.pos.y, err: tr.uncertainty || 400 };
+    var gap = t - fx.t;
+    var v = Geo.headingVec(tr.course || 0);
+    var step = (tr.speed || 0) * U.KNOT_MS * gap;
+    var drift = driftRate(tr) * Math.abs(gap);
+    return {
+      x: fx.x + v.x * step,
+      y: fx.y + v.y * step,
+      err: Math.sqrt(fx.err * fx.err + drift * drift)
+    };
+  }
+
   function deliver(world, cmd, p) {
     if (p.kind === 'contact') {
       var pic = world.tracks[cmd.side] || (world.tracks[cmd.side] = {});
       for (var i = 0; i < p.obs.length; i++) {
         var o = p.obs[i];
         var tr = pic[o.id];
+
         if (!tr) {
           tr = pic[o.id] = {
             id: o.id, side: cmd.side,
             pos: { x: o.pos.x, y: o.pos.y },
             course: o.course, speed: o.speed,
-            uncertainty: o.uncertainty, idLevel: 0,
+            uncertainty: o.posErr || o.uncertainty || 400,
+            idLevel: 0,
             typeGuess: null, classGuess: null, nameGuess: null,
             misId: false, lastSeen: o.observedAt, firstSeen: world.time,
             seenBy: p.from, fixes: [], seenThisTick: false,
             source: o.source, observedAt: o.observedAt, reportedAt: world.time,
-            via: p.fromName, iff: 'unknown'
+            via: p.fromName, iff: 'unknown',
+            contributors: {}, latency: 0, esmOnly: !!o.esmOnly, bestErr: 1e9
           };
         }
-        // 更旧的消息不能覆盖更新的
-        if ((tr.observedAt || 0) > o.observedAt) continue;
 
-        tr.pos = { x: o.pos.x, y: o.pos.y };
+        /* ---- 这份报告在路上走了多久 ---- */
+        var age = Math.max(0, world.time - o.observedAt);
+        var newErr = Math.max(120, o.posErr || o.uncertainty || 400);
+
+        /* ---- 融合：新位置 vs 旧航迹外推到同一时刻 ---- */
+        var fused;
+        if (!tr.fix) {
+          fused = { x: o.pos.x, y: o.pos.y, err: newErr };
+        } else {
+          var pred = predictAt(tr, o.observedAt);
+          var wNew = 1 / (newErr * newErr);
+          // 旧航迹的权重随时间打折：放了两分钟的东西，不该和新报告平起平坐
+          // （如果这份报告比图上已有的还旧，旧定解点按满权算，自然把它压下去）
+          var oldAge = o.observedAt - tr.fix.t;
+          var decay = oldAge > 0 ? Math.exp(-oldAge / 90) : 1;
+          var wOld = decay / (pred.err * pred.err);
+          var w = wOld + wNew;
+          fused = {
+            x: (pred.x * wOld + o.pos.x * wNew) / w,
+            y: (pred.y * wOld + o.pos.y * wNew) / w,
+            err: Math.sqrt(1 / w)
+          };
+        }
+
+        // 定解点落在"这次观测的时刻"，之后由外推负责往前推
+        /* 融合的下限：同一批传感器反复报，误差里有一大块是**共模**的
+           （本舰自己的位置误差、雷达标定、测距仪基线），这部分再怎么平均
+           也消不掉。所以融合后的圈不许小于最好那份的 65%。 */
+        var best = Math.min(tr.bestErr || 1e9, newErr);
+        tr.bestErr = best;
+        fused.err = Math.max(fused.err, best * 0.65);
+
+        /* 电探只有方位：反复融合能把方位越校越准，但**永远测不出距离**。
+           所以误差不许被融合压到测距误差的一半以下，否则会凭空造出一个
+           能开炮的解 —— 那是作弊。 */
+        if (o.esmOnly) fused.err = Math.max(fused.err, newErr * 0.55);
+        tr.fix = { x: fused.x, y: fused.y, t: o.observedAt, err: fused.err };
         tr.course = o.course;
         tr.speed = o.speed;
-        tr.uncertainty = Math.max(tr.uncertainty || 0, o.uncertainty);
         tr.lastSeen = o.observedAt;
         tr.observedAt = o.observedAt;
         tr.reportedAt = world.time;
+        tr.latency = age;
         tr.seenBy = p.from;
         tr.via = p.fromName;
         tr.source = o.source;
+        tr.esmOnly = !!o.esmOnly;
+        tr.contributors[p.from] = (tr.contributors[p.from] || 0) + 1;
+
+        // 外推到当前时刻（融合点 → 现在）
+        var nowP = predictAt(tr, world.time);
+        tr.pos = { x: nowP.x, y: nowP.y };
+        tr.uncertainty = Math.min(9000, nowP.err);
+        tr.age = world.time - o.observedAt;
+
         if (o.idLevel > tr.idLevel) {
           tr.idLevel = o.idLevel;
           tr.typeGuess = o.typeGuess;
@@ -477,15 +577,15 @@
 
     for (var k in pic) {
       var tr = pic[k];
-      var gap = world.time - (tr.observedAt || tr.lastSeen);
+      if (!tr.fix) continue;
+      var gap = world.time - tr.fix.t;
       if (gap > 900) { delete pic[k]; continue; }
-      if (gap < 1) continue;
 
-      // 报告之间的空档：按估算航向外推，误差随时间涨
-      var v = Geo.headingVec(tr.course || 0);
-      var step = (tr.speed || 0) * U.KNOT_MS * dt;
-      tr.pos = { x: tr.pos.x + v.x * step, y: tr.pos.y + v.y * step };
-      tr.uncertainty = Math.min(9000, (tr.uncertainty || 300) + 40 * dt);
+      /* 从定解点重算，不是每帧累加 —— 这样误差只跟"定解点到现在多久"有关，
+         不会因为掉帧或者速度变化而累积成假的漂移。 */
+      var p = predictAt(tr, world.time);
+      tr.pos = { x: p.x, y: p.y };
+      tr.uncertainty = Math.min(9000, p.err);
       tr.age = gap;
       tr.stale = gap > 45;
     }
@@ -652,6 +752,9 @@
     init: init,
     update: update,
     report: report,
+    deliver: deliver,
+    predictAt: predictAt,
+    driftRate: driftRate,
     extrapolatePicture: extrapolatePicture,
     sendOrder: sendOrder,
     ownView: ownView,

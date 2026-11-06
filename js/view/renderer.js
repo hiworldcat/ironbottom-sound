@@ -604,10 +604,12 @@
       var s = cam.w2s(tr.pos, W, H);
       if (s.x < -200 || s.x > W + 200 || s.y < -200 || s.y > H + 200) continue;
 
-      var age = world.time - tr.lastSeen;
+      var age = tr.age != null ? tr.age : world.time - tr.lastSeen;
       var stale = age > 45;
-      var identified = tr.idLevel >= N.Sensors.ID.TYPE;
-      var col = identified ? COL.contactId : COL.contact;
+      var identified = tr.idLevel >= N.Sensors.ID.TYPE && !tr.esmOnly;
+      // 电探只能测向：紫色，且画一条方位线出来
+      var esm = !!tr.esmOnly;
+      var col = esm ? '#d9a6ff' : (identified ? COL.contactId : COL.contact);
       var alpha = stale ? 0.45 : 1.0;
       var unc = Math.max(14, tr.uncertainty * cam.zoom);
       var selected = ui.selectedTrackId === tr.id;
@@ -615,11 +617,28 @@
       ctx.save();
       ctx.globalAlpha = alpha;
 
+      /* 电探方位线：从本阵一直拉过接触点，说明"只知道在这个方向上" */
+      if (esm) {
+        var ref = world.playerReference();
+        var rs = cam.w2s(ref, W, H);
+        var dx = s.x - rs.x, dy = s.y - rs.y;
+        var len = Math.sqrt(dx * dx + dy * dy) || 1;
+        ctx.beginPath();
+        ctx.moveTo(rs.x, rs.y);
+        ctx.lineTo(s.x + dx / len * 60, s.y + dy / len * 60);
+        ctx.setLineDash([2, 6]);
+        ctx.strokeStyle = 'rgba(217,166,255,0.45)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       // 误差圈
       ctx.beginPath();
       ctx.arc(s.x, s.y, unc, 0, Math.PI * 2);
       ctx.setLineDash([4, 5]);
-      ctx.strokeStyle = selected ? 'rgba(255,255,255,0.55)' : 'rgba(255,193,92,0.32)';
+      ctx.strokeStyle = selected ? 'rgba(255,255,255,0.55)'
+        : (esm ? 'rgba(217,166,255,0.38)' : 'rgba(255,193,92,0.32)');
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.setLineDash([]);
@@ -627,7 +646,7 @@
       if (selected) {
         ctx.beginPath();
         ctx.arc(s.x, s.y, unc, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,193,92,0.06)';
+        ctx.fillStyle = esm ? 'rgba(217,166,255,0.07)' : 'rgba(255,193,92,0.06)';
         ctx.fill();
       }
 
@@ -645,8 +664,8 @@
         ctx.restore();
       }
 
-      // 航向箭头
-      if (tr.speed > 1) {
+      // 航向箭头（电探没有航向，别画）
+      if (tr.speed > 1 && !esm) {
         var hv = Geo.headingVec(tr.course);
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
@@ -657,16 +676,21 @@
       }
 
       // 标签
-      var label = N.Sensors.idText(tr);
+      var label = esm ? '雷达辐射源' : N.Sensors.idText(tr);
       var dist = V.dist(world.playerReference(), tr.pos);
+      var errTxt = tr.uncertainty >= 1000
+        ? '±' + (tr.uncertainty / 1000).toFixed(1) + 'km'
+        : '±' + Math.round(tr.uncertainty) + 'm';
       ctx.font = '11px "Microsoft YaHei", system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = col;
       ctx.fillText(label, s.x + unc + 6, s.y - 7);
-      ctx.fillStyle = 'rgba(255,193,92,0.65)';
+      ctx.fillStyle = esm ? 'rgba(217,166,255,0.72)' : 'rgba(255,193,92,0.65)';
       ctx.font = '10px "Consolas", monospace';
-      ctx.fillText(U.fmtRange(dist) + '  ' + Math.round(tr.course) + '° / ' + tr.speed.toFixed(0) + 'kn' +
+      ctx.fillText((esm ? '仅方位  ' : U.fmtRange(dist) + '  ') +
+        (esm ? '' : Math.round(tr.course) + '° / ' + tr.speed.toFixed(0) + 'kn  ') +
+        errTxt + (age >= 5 ? '  ' + Math.round(age) + 's前' : '') +
         (stale ? '  (陈旧)' : ''), s.x + unc + 6, s.y + 7);
 
       ctx.restore();
