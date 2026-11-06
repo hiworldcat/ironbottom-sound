@@ -41,6 +41,8 @@
 | 真实海岸线画的海图（Natural Earth 1:10m） | 奥古斯塔皇后湾，22 艘舰 |
 | ![舰艇照片](screenshots/shot-ship-photo.png) | ![照片大图](screenshots/shot-photo-view.png) |
 | 点选舰艇，详情面板顶部是它的历史照片 | 点开看大图，附维基条目链接 |
+| ![瓜岛—萨沃—图拉吉](screenshots/shot-map-guadalcanal.png) | ![线上版](screenshots/shot-live-map-photo.png) |
+| 瓜达尔卡纳尔、萨沃、图拉吉之间的真实海峡 | 线上版：科隆班加拉以北，檀香山号 |
 | ![炮击](screenshots/shot-zones.png) | ![回放](screenshots/shot-result-hist.png) |
 | 舰体结构分区 | 战后史实与回放 |
 | ![雨飑](screenshots/shot-weather-storm.png) | ![月夜](screenshots/shot-weather-night.png) |
