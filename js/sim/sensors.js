@@ -349,6 +349,8 @@
      * 自己看得见就用本舰的（即时），否则用指挥舰发下来的态势（可能已经旧了）。
      */
     trackFor: function (world, ship, targetId) {
+      // 识别器认错了：这条船眼里的"敌舰"其实是自己的友舰
+      if (ship && ship.ffTrack && ship.ffTrack.id === targetId) return ship.ffTrack;
       var own = ship.ownTracks ? ship.ownTracks[targetId] : null;
       var pic = Sensors.track(world, ship.side, targetId);
       if (!own) return pic;

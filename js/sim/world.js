@@ -386,28 +386,128 @@
     return null;
   };
 
+  /** 岛的包围盒（懒算，isLand 和射界判定共用） */
+  function islandBB(is) {
+    if (is._bb) return is._bb;
+    var poly = is.poly;
+    var minx = 1e12, maxx = -1e12, miny = 1e12, maxy = -1e12;
+    for (var j = 0; j < poly.length; j++) {
+      if (poly[j].x < minx) minx = poly[j].x;
+      if (poly[j].x > maxx) maxx = poly[j].x;
+      if (poly[j].y < miny) miny = poly[j].y;
+      if (poly[j].y > maxy) maxy = poly[j].y;
+    }
+    is._bb = { x0: minx, y0: miny, x1: maxx, y1: maxy };
+    return is._bb;
+  }
+
   World.prototype.isLand = function (x, y) {
     var b = this.bounds;
     if (x < b.x0 || x > b.x1 || y < b.y0 || y > b.y1) return true;
     var isl = N.ISLANDS;
     for (var i = 0; i < isl.length; i++) {
       var poly = isl[i].poly;
-      // 快速包围盒
-      var minx = 1e12, maxx = -1e12, miny = 1e12, maxy = -1e12;
-      if (!isl[i]._bb) {
-        for (var j = 0; j < poly.length; j++) {
-          if (poly[j].x < minx) minx = poly[j].x;
-          if (poly[j].x > maxx) maxx = poly[j].x;
-          if (poly[j].y < miny) miny = poly[j].y;
-          if (poly[j].y > maxy) maxy = poly[j].y;
-        }
-        isl[i]._bb = { x0: minx, y0: miny, x1: maxx, y1: maxy };
-      }
-      var bb = isl[i]._bb;
+      var bb = islandBB(isl[i]);
       if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue;
       if (Geo.pointInPolygon({ x: x, y: y }, poly)) return true;
     }
     return false;
+  };
+
+  /* ------------------------------------------------------------------ 射界遮挡 */
+  /**
+   * 从 a 到 b 这条直线穿不穿过陆地？穿过就返回挡路的那个岛，没有就返回 null。
+   *
+   * 只对"包围盒和线段包围盒有重叠"的那几个岛做精确计算 —— 所罗门群岛
+   * 59 个多边形两千多个顶点，全算的话每次开火都要跑几万次边相交。
+   */
+  World.prototype.landBetween = function (ax, ay, bx, by, skipEnds, skipIsl) {
+    var isl = N.ISLANDS;
+    var x0 = Math.min(ax, bx), x1 = Math.max(ax, bx);
+    var y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+    var a = { x: ax, y: ay }, b = { x: bx, y: by };
+    for (var i = 0; i < isl.length; i++) {
+      var is = isl[i];
+      if (is === skipIsl) continue;
+      var bb = islandBB(is);
+      if (x1 < bb.x0 || x0 > bb.x1 || y1 < bb.y0 || y0 > bb.y1) continue;
+      if (!skipEnds) {
+        // 端点落在岛上也算（近距离射击时常见）
+        if (Geo.pointInPolygon(a, is.poly)) return is;
+        if (Geo.pointInPolygon(b, is.poly)) return is;
+      }
+      if (Geo.segIntersectsPolygon(a, b, is.poly)) return is;
+    }
+    return null;
+  };
+
+  /** 线段穿过多边形边界的次数 */
+  function polyCrossings(a, b, poly) {
+    var n = 0;
+    for (var i = 0; i < poly.length; i++) {
+      var c = poly[i], d = poly[(i + 1) % poly.length];
+      if (Geo._segSeg(a, b, c, d)) n++;
+    }
+    return n;
+  }
+
+  /**
+   * 射界：从这艘舰到 to 这一点，炮能不能打过去。
+   *
+   * 挡路的东西有两类：
+   *   1. 岛 —— 山高几百米，任何弹道都翻不过去；
+   *   2. 自己人的大舰 —— 只有在炮弹还压在桅杆高度以下时才挡得住。
+   *      10 km 上打出去的炮弹，飞到 500 m 处已经在 80 m 高空，
+   *      从友舰头顶过去了；所以真正会挡的只有近距离平射。
+   *
+   * opts.shore：目标是岸上的东西（岸轰）。岸上目标本来就坐在岛的轮廓里，
+   *   而且往往离海岸好几公里（亨德森机场在纵深 3 km），所以：
+   *     · 目标自己那座岛不算挡路（炮弹是从滩头飞过去的）；
+   *     · 但如果这条线横穿整座岛（从岛的背面打），那还是打不到。
+   *
+   * 返回 { ok:true } 或 { ok:false, kind:'land'|'friendly', name, ship }。
+   */
+  World.prototype.lineOfFire = function (ship, to, elevDeg, opts) {
+    var from = ship.pos;
+    var R = V.dist(from, to);
+    var shore = !!(opts && opts.shore);
+    var a = { x: from.x, y: from.y }, b = { x: to.x, y: to.y };
+
+    var ownIsl = null;
+    if (shore) {
+      for (var k = 0; k < N.ISLANDS.length; k++) {
+        if (Geo.pointInPolygon(b, N.ISLANDS[k].poly)) { ownIsl = N.ISLANDS[k]; break; }
+      }
+    }
+
+    var isl = this.landBetween(from.x, from.y, to.x, to.y, true, ownIsl);
+    if (isl) return { ok: false, kind: 'land', name: isl.name || '无名礁' };
+
+    // 目标在自己那座岛上，但这条线把整座岛都穿过去了 → 从背面打，打不到
+    if (ownIsl && polyCrossings(a, b, ownIsl.poly) >= 2) {
+      return { ok: false, kind: 'land', name: ownIsl.name || '无名礁' };
+    }
+
+    if (R < 300) return { ok: true };
+    // 弹道高度：h(d) = tan(仰角) · d · (1 - d/R)，抛物线近似
+    var tanE = Math.tan((elevDeg || 0) * Math.PI / 180);
+
+    for (var i = 0; i < this.ships.length; i++) {
+      var s = this.ships[i];
+      if (s === ship || s.side !== ship.side) continue;
+      if (!s.alive || s.sunk) continue;
+      // 驱逐舰太窄太矮，炮弹从桅杆之间穿过去 —— 只有巡洋舰以上挡得住
+      if (s.cls.displacement < 5000) continue;
+      var d = V.dist(from, s.pos);
+      if (d < 140 || d > R - 120) continue;
+      var h = tanE * d * (1 - d / R);
+      if (h > 46) continue;                       // 已经从头顶过去了
+      var perp = N.Sensors.segDist(from.x, from.y, to.x, to.y, s.pos.x, s.pos.y);
+      if (perp < s.cls.beam * 0.5 + 26) {
+        return { ok: false, kind: 'friendly', name: s.name, ship: s };
+      }
+    }
+    return { ok: true };
   };
 
   /* ------------------------------------------------------------------ 航迹清理 */

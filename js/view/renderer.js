@@ -1214,10 +1214,13 @@
       var st = world.shoreTargetById(ship.bombardTargetId);
       if (st && !st.destroyed) { tgtPos = st.pos; tgtCol = 'rgba(255,190,120,0.8)'; }
     } else if (ship.targetTrackId) {
-      var tr = N.Sensors.track(world, world.playerSide, ship.targetTrackId);
+      var tr = N.Sensors.trackFor(world, ship, ship.targetTrackId);
       if (tr) tgtPos = tr.pos;
     }
     if (tgtPos) {
+      var lb = ship.losBlocked;
+      var blocked = lb && (world.time - lb.t) < 6;
+      if (blocked) tgtCol = 'rgba(255,92,92,0.95)';
       var tb = Geo.bearing(ship.pos, tgtPos);
       var ta = (tb - 90) * DEG;
       ctx.beginPath();
@@ -1230,6 +1233,21 @@
       ctx.fillStyle = tgtCol;
       ctx.textAlign = 'center';
       ctx.fillText(Math.round(tb) + '°', sx + Math.cos(ta) * (R + 27), sy + Math.sin(ta) * (R + 27));
+      // 射界被挡住：在方位刻度上打一个红叉，并在旁边写明被谁挡的
+      if (blocked) {
+        var cx = sx + Math.cos(ta) * (R + 9), cy = sy + Math.sin(ta) * (R + 9);
+        ctx.strokeStyle = 'rgba(255,92,92,0.95)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(cx - 4, cy - 4); ctx.lineTo(cx + 4, cy + 4);
+        ctx.moveTo(cx + 4, cy - 4); ctx.lineTo(cx - 4, cy + 4);
+        ctx.stroke();
+        ctx.font = 'bold 9px "Microsoft YaHei", sans-serif';
+        ctx.fillStyle = 'rgba(255,120,110,0.95)';
+        ctx.textAlign = 'center';
+        ctx.fillText('射界被' + (lb.kind === 'land' ? '' : '友舰') + '「' + lb.name + '」挡住',
+          sx + Math.cos(ta) * (R + 40), sy + Math.sin(ta) * (R + 40) + 3);
+      }
     }
 
     ctx.restore();

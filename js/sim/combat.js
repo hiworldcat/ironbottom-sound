@@ -63,11 +63,51 @@
   }
 
   /* ==========================================================================
+   *  射界：岛、友舰都可能挡在炮口前面
+   * ========================================================================== */
+  /** 这艘舰打得最远的炮现在大概抬到多少度（和 updateMounts 里的算法一致） */
+  function elevFor(ship, range) {
+    var gun = null;
+    for (var i = 0; i < ship.mounts.length; i++) {
+      var m = ship.mounts[i];
+      if (m.destroyed || m.disabled) continue;
+      if (!gun || m.gun.caliber > gun.caliber) gun = m.gun;
+    }
+    if (!gun || !gun.maxRange) return 0;
+    return Math.pow(U.clamp01(range / gun.maxRange), 0.7) * (gun.caliber >= 200 ? 42 : 30);
+  }
+
+  /**
+   * 带缓存的射界判定。位置每帧都在变，但没必要每帧重算一遍岛；
+   * 半秒内目标没挪出 60 m 就用上次的结果。
+   */
+  function losFor(world, ship, to, shore) {
+    var c = ship._los;
+    if (c && c.shore === !!shore && world.time - c.t < 0.5 && V.dist(c.to, to) < 60) return c.r;
+    var r = world.lineOfFire(ship, to, elevFor(ship, V.dist(ship.pos, to)), { shore: !!shore });
+    ship._los = { t: world.time, to: { x: to.x, y: to.y }, r: r, shore: !!shore };
+    return r;
+  }
+
+  /** 射界被挡住时记一笔（同一处遮挡一分钟内不重复刷） */
+  function noteBlocked(world, ship, los) {
+    ship.losBlocked = { kind: los.kind, name: los.name, t: world.time };
+    var last = ship._losLog;
+    if (last && last.name === los.name && world.time - last.t < 60) return;
+    ship._losLog = { name: los.name, t: world.time };
+    if (ship.side !== world.playerSide) return;
+    world.log(ship.side, los.kind === 'land'
+      ? '⛰ ' + ship.name + ' 射界被「' + los.name + '」挡住，打不过去'
+      : '⚠ ' + ship.name + ' 的炮口被友舰「' + los.name + '」挡住，无法射击',
+      'warn');
+  }
+
+  /* ==========================================================================
    *  开火
    * ========================================================================== */
   function tryFire(world, ship, dt) {
     if (ship.sunk || ship.sinking || !ship.engage) return;
-    if (!ship.targetTrackId) return;
+    if (!ship.targetTrackId) { ship.losBlocked = null; return; }
     // 火控用本舰自己看得见的那份（即时）；指挥舰发下来的态势可能已经旧了
     var track = N.Sensors.trackFor(world, ship, ship.targetTrackId);
     if (!track) return;
@@ -77,6 +117,14 @@
     var sol = computeSolution(world, ship, track);
     ship.solution = sol;
     if (!sol) return;
+
+    // 射界：中间隔着岛，或者自己人横在炮口上，这一轮就是打不了
+    var los = losFor(world, ship, sol.aim);
+    if (!los.ok) {
+      noteBlocked(world, ship, los);
+      return;
+    }
+    ship.losBlocked = null;
 
     var rel = ship.relativeBearing(track.pos);
     var rng = world.rng;
@@ -172,6 +220,11 @@
     var dist = V.dist(ship.pos, tgt.pos);
     var brg = Geo.bearing(ship.pos, tgt.pos);
     var firedAny = false;
+
+    // 炮击岸上目标一样要看射界：目标躲在山背后就是打不到
+    var losB = losFor(world, ship, tgt.pos, true);
+    if (!losB.ok) { noteBlocked(world, ship, losB); return; }
+    ship.losBlocked = null;
 
     for (var i = 0; i < ship.mounts.length; i++) {
       var m = ship.mounts[i];
@@ -300,14 +353,21 @@
       return;
     }
 
-    // 落点附近有没有敌舰：先看有没有直接命中，再记下最近的一艘算近失
+    // 落点附近有没有舰：先看有没有直接命中，再记下最近的一艘算近失
+    // 注意这里**不分敌我** —— 炮弹不认识旗子，打偏了砸到自己人身上一样穿个洞。
+    // 近失弹只算敌方：编队密集时自己人的齐射天天从头顶过，全都算伤就太吵了。
+    var hitFriend = false;
     for (var i = 0; i < world.ships.length; i++) {
       var sh = world.ships[i];
-      if (sh.side === shell.side || sh.sunk || !sh.alive) continue;
+      if (sh.sunk || !sh.alive) continue;
+      var same = (sh.side === shell.side);
+      if (same && sh.id === shell.ownerId) continue;      // 不会打到自己
       if (Geo.inShipRect(shell.to, sh.pos, sh.heading, sh.cls.length, sh.cls.beam, 6)) {
         hitShip = sh;
+        hitFriend = same;
         break;
       }
+      if (same) continue;
       var g = hullGap(shell.to, sh);
       if (g < nearGap) { nearGap = g; nearShip = sh; }
     }
@@ -317,6 +377,17 @@
     if (hitShip) {
       resolveHit(world, hitShip, shell);
       if (salvo) salvo.hits++;
+      if (hitFriend) {
+        var owner = world.shipById(shell.ownerId);
+        if (!world.friendlyFire) world.friendlyFire = { US: 0, JP: 0 };
+        world.friendlyFire[shell.side] = (world.friendlyFire[shell.side] || 0) + 1;
+        if (owner) owner.friendlyHits = (owner.friendlyHits || 0) + 1;
+        if (shell.side === world.playerSide) {
+          world.log(shell.side, '💢 误击！' + (owner ? owner.name : '我舰') +
+            ' 的炮弹打中了友舰「' + hitShip.name + '」', 'bad');
+        }
+        world.bus.emit('friendlyFire', { shooter: owner, victim: hitShip });
+      }
     } else {
       // 没打中 —— 但落在舷侧近处就是近失弹
       var nearR = nearMissRadius(shell.gun);
@@ -347,8 +418,10 @@
     delete world.salvoes[salvoId];
     if (!ship || ship.sunk) return;
 
+    // 打的是被误认成敌舰的友军：校射照样收敛，但别在战报里喊"打中目标"
+    var misFire = !!(salvo.targetTrack && salvo.targetTrack.ffTarget);
     var straddle = salvo.hits > 0 || (salvo.short > 0 && salvo.long > 0);
-    var canLog = (world.time - (ship._lastSpotLog || -999)) > 22;
+    var canLog = !misFire && (world.time - (ship._lastSpotLog || -999)) > 22;
     if (salvo.hits > 0) {
       ship.errorScale = Math.max(0.28, ship.errorScale * 0.62);
       ship.spotting = { kind: 'hit', t: world.time };

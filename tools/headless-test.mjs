@@ -1353,38 +1353,43 @@ function testNearMiss() {
   };
   const fireGap = (gap, salvo) => fireAt(base.x + s.cls.beam / 2 + gap, base.y, salvo);
 
-  // 1) 贴着舷侧 4 米：必须算近失弹，而且会进水
+  // 1) 贴着舷侧 8 米：必须算近失弹（已经出了船体矩形的 6 米余量），而且会进水
   reset();
   const f0 = s.floodRate;
   w.shells.push({ side: 'JP', ownerId: 'x', gun: gun,
-    to: { x: base.x + s.cls.beam / 2 + 4, y: base.y }, t: 0, tf: 0, range: 8000,
+    to: { x: base.x + s.cls.beam / 2 + 8, y: base.y }, t: 0, tf: 0, range: 8000,
     salvoId: 'NM', aim: { x: base.x, y: base.y } });
   w.update(0.1);
-  if (!(s.hull < s.hullMax - 1e-6)) problems.push('近失弹自检: 舷侧 4 米的近失弹没有伤到舰体');
+  if (!(s.hull < s.hullMax - 1e-6)) problems.push('近失弹自检: 舷侧 8 米的近失弹没有伤到舰体');
   if (!(s.floodRate > f0)) problems.push('近失弹自检: 近失弹没有造成进水');
 
   // 2) 离舷侧 200 米：完全不该有伤害
   const far = fireGap(200);
   if (far > 1e-6) problems.push(`近失弹自检: 200 米外的落点也造成了 ${far.toFixed(3)} 点伤害`);
 
-  // 3) 越近越狠
-  const a = fireGap(3);
-  const b = fireGap(20);
-  if (!(a > b)) problems.push(`近失弹自检: 4 米 ${a.toFixed(2)} 点，20 米 ${b.toFixed(2)} 点，近的没更狠`);
+  // 3) 越近越狠（两个都在近失弹区间里，否则比的就不是近失弹了）
+  const a = fireGap(8);
+  const b = fireGap(18);
+  if (!(a > b)) problems.push(`近失弹自检: 8 米 ${a.toFixed(2)} 点，18 米 ${b.toFixed(2)} 点，近的没更狠`);
 
   // 4) 近失弹的水柱要能被渲染出来
-  fireGap(4);
+  fireGap(8);
   if (!w.splashes.filter(x => x.kind === 'near').length) problems.push('近失弹自检: 没有生成 near 水柱');
 
-  // 5) 量级：近失弹要明显小于直接命中（直接命中取 40 发的平均值，避开落点随机性）
+  // 5) 量级：近失弹要明显小于直接命中。
+  //    两边都取 40 发的平均值 —— 单发直接命中的伤害随机性极大（打中炮塔和打中
+  //    机舱差好几倍），拿单发去比平均值是拿噪声当结论。
   let sum = 0;
   for (let i = 0; i < 40; i++) sum += fireAt(base.x, base.y, 'NM2');
   const avgDirect = sum / 40;
-  if (a > avgDirect * 0.45) {
-    problems.push(`近失弹自检: 近失弹 ${a.toFixed(2)} 点已经接近直接命中的平均值 ${avgDirect.toFixed(2)} 点了`);
+  let sumNear = 0;
+  for (let i = 0; i < 40; i++) sumNear += fireGap(8, 'NM3');
+  const avgNear = sumNear / 40;
+  if (avgNear > avgDirect * 0.45) {
+    problems.push(`近失弹自检: 近失弹平均 ${avgNear.toFixed(2)} 点已经接近直接命中的平均值 ${avgDirect.toFixed(2)} 点了`);
   }
 
-  console.log(`近失弹自检: 舷侧 3 米 ${a.toFixed(2)} 点 / 20 米 ${b.toFixed(2)} 点 / ` +
+  console.log(`近失弹自检: 舷侧 8 米 ${a.toFixed(2)} 点（均 ${avgNear.toFixed(2)}） / 18 米 ${b.toFixed(2)} 点 / ` +
     `200 米 ${far.toFixed(2)} 点，直接命中平均 ${avgDirect.toFixed(2)} 点，杀伤半径 ` +
     `${(7 + 1.35 * Math.sqrt(125)).toFixed(0)} 米`);
 }

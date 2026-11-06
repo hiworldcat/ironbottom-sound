@@ -149,6 +149,102 @@
     return !ship.iffDestroyed;
   }
 
+  /* ==========================================================================
+   *  敌我识别失灵：把自己的船当成敌舰
+   *
+   *  识别器是装在船上的东西，所以这件事也按**舰**算，不按舰队算：
+   *  某条船的识别器坏了（或者干脆没装），它在夜里的回波里分不清敌我，
+   *  就会对着自己人开火。旗舰的识别器好，不代表别的船不会认错。
+   *
+   *  触发条件：
+   *    · 这条船正在交战（engage）—— 不打仗的时候没人去认目标；
+   *    · 附近有友舰（22 km 内，旗舰不算 —— 谁都知道旗舰在哪）；
+   *    · 识别器正常时每次判定 1%，识别器失灵时 10%。
+   *
+   *  认错以后这条船会把友舰当成目标，炮弹落在真船上 —— 是真的会沉。
+   *  45 秒左右识别纠正，或者友舰打信号弹/闪灯，就停了。
+   *
+   *  注意：舰上的字段叫 ffTrack（friendly-fire），和航迹上原有的 misId
+   *  （认错舰种）是两回事，别混。
+   * ========================================================================== */
+  var MISID = { life: 30, every: 90, err: 25 };
+
+  /** 这条船此刻正在把自己的哪条友舰当成敌人 */
+  function misIdOf(ship) {
+    return (ship && ship.ffTrack) ? ship.ffTrack : null;
+  }
+
+  function clearMisId(world, ship) {
+    if (!ship || !ship.ffTrack) return;
+    var victim = world.shipById(ship.ffTrack.friendlyId);
+    ship.ffTrack = null;
+    ship.ffUntil = 0;
+    if (victim && ship.targetTrackId === victim.id) ship.targetTrackId = null;
+    if (victim && !victim.sunk && ship.side === world.playerSide) {
+      world.log(ship.side, '✓ ' + ship.name + ' 认出「' + victim.name + '」是自己人', 'info');
+    }
+  }
+
+  function checkMisId(world, side) {
+    for (var i = 0; i < world.ships.length; i++) {
+      var ship = world.ships[i];
+      if (ship.side !== side || !ship.alive || ship.sunk) continue;
+
+      /* ---- 已经在认错：跟着真船更新"敌舰"的位置 ---- */
+      if (ship.ffTrack) {
+        var v = world.shipById(ship.ffTrack.friendlyId);
+        if (!v || v.sunk || world.time >= (ship.ffUntil || 0)) { clearMisId(world, ship); continue; }
+        ship.ffTrack.pos = { x: v.pos.x + ship.ffTrack._dx, y: v.pos.y + ship.ffTrack._dy };
+        ship.ffTrack.course = v.heading;
+        ship.ffTrack.speed = v.speed;
+        ship.ffTrack.lastSeen = world.time;
+        continue;
+      }
+
+      if (world.time < (ship._nextMisCheck || 0)) continue;
+      var down = !iffOk(ship);
+      ship._nextMisCheck = world.time + MISID.every * world.rng.range(0.7, 1.4);
+      if (!ship.engage) continue;
+
+      var p = down ? 0.10 : (N.Damage ? N.Damage.iffError(ship) : DEFAULTS.iffError);
+      if (!world.rng.chance(p)) continue;
+
+      // 挑一艘附近的友舰
+      var cand = [];
+      for (var j = 0; j < world.ships.length; j++) {
+        var s = world.ships[j];
+        if (s === ship || s.side !== side || !s.alive || s.sunk) continue;
+        if (s.role === 'flagship') continue;
+        if (V.dist(s.pos, ship.pos) > 22000) continue;
+        cand.push(s);
+      }
+      if (!cand.length) continue;
+      var victim = world.rng.pick(cand);
+      forceMisId(world, ship, victim, down);
+    }
+  }
+
+  /** 强制制造一次误判（checkMisId 用它，调试和截图也用它） */
+  function forceMisId(world, ship, victim, down) {
+    var dx = world.rng.dev(MISID.err), dy = world.rng.dev(MISID.err);
+    ship.ffTrack = {
+      id: victim.id, friendlyId: victim.id, ffTarget: true,
+      pos: { x: victim.pos.x + dx, y: victim.pos.y + dy },
+      course: victim.heading, speed: victim.speed,
+      uncertainty: MISID.err, idLevel: 2,
+      typeGuess: victim.cls.type, classGuess: victim.cls.typeName,
+      source: 'visual', iff: 'hostile',
+      firstSeen: world.time, lastSeen: world.time, _dx: dx, _dy: dy
+    };
+    ship.ffUntil = world.time + MISID.life * world.rng.range(0.8, 1.3);
+    ship.targetTrackId = victim.id;
+    if (ship.side === world.playerSide) {
+      world.log(ship.side, '⚠ ' + ship.name + ' 的识别器' + (down ? '失灵' : '出错') +
+        '：把「' + victim.name + '」当成了敌舰，正在开火！', 'bad');
+    }
+    world.bus.emit('misId', { side: ship.side, shooter: ship, victim: victim });
+  }
+
   /**
    * 从 a 发一条消息给 b，能不能发出去、要多久、会不会丢。
    * @return {ok, delay, lost, visual, reason}
@@ -673,6 +769,7 @@
       }
 
       reportStatus(world, side);
+      checkMisId(world, side);
     }
   }
 
@@ -766,6 +863,11 @@
     flagshipOf: flagshipOf,
     cmdOf: cmdOf,
     link: link,
-    classify: classify
+    classify: classify,
+    checkMisId: checkMisId,
+    forceMisId: forceMisId,
+    misIdOf: misIdOf,
+    clearMisId: clearMisId,
+    MISID: MISID
   };
 })(globalThis.Naval = globalThis.Naval || {});

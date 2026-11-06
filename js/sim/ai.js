@@ -70,6 +70,10 @@
   }
 
   function pickTarget(world, ship) {
+    /* 识别器认错了：这条船正把一条友舰当成敌舰，别的目标都得靠边站。
+       它会一直打到识别纠正为止 —— 这就是误伤。 */
+    if (ship.ffTrack && world.time < (ship.ffUntil || 0)) return ship.ffTrack;
+
     var tracks = N.Sensors.trackList(world, ship.side);
     var best = null, bestScore = -1;
     for (var i = 0; i < tracks.length; i++) {
@@ -367,7 +371,7 @@
       }
     }
 
-    var track = ship.targetTrackId ? N.Sensors.track(world, ship.side, ship.targetTrackId) : null;
+    var track = ship.targetTrackId ? N.Sensors.trackFor(world, ship, ship.targetTrackId) : null;
     if (!track || world.time - track.lastSeen > 240) {
       // 无目标：前往敌可能出现的海域搜索
       ship.engage = false;
@@ -420,7 +424,9 @@
     ship.engage = inRange;
 
     /* ---------- 鱼雷 ---------- */
-    if (ai.torpCooldown <= world.time && ship.torpRangeMax > 0) {
+    /* 鱼雷不放：发射前要"确认目标"，这是各国海军的硬规定，也是本作里
+       识别器认错时唯一的刹车 —— 炮可能误击，鱼雷不会。 */
+    if (ai.torpCooldown <= world.time && ship.torpRangeMax > 0 && !ship.ffTrack) {
       var trng = ship.torpRangeMax * doc.torpFrac;
       var rel = Math.abs(U.angDiff(brg, ship.heading));
       if (range < trng && rel > 35 && rel < 145) {

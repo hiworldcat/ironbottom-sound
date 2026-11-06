@@ -661,6 +661,18 @@
     var fc = dv ? dv.fc : !ship.fcDestroyed;
     rows.push(['火控', fc ? '正常' : '击毁', fc ? 'ok' : 'bad']);
 
+    /* 射界：中间隔着岛，或者自己人横在炮口上 */
+    if (!ship.sunk && !ship.sinking) {
+      var lb = ship.losBlocked;
+      if (lb && world.time - lb.t < 6) {
+        rows.push(['射界', lb.kind === 'land'
+          ? '被「' + lb.name + '」挡住'
+          : '被友舰「' + lb.name + '」挡住', 'bad']);
+      } else {
+        rows.push(['射界', '通', 'ok']);
+      }
+    }
+
     /* 损管（只有自己这边的舰知道自己的抢修进度） */
     if (!stale && !ship.sunk && !ship.sinking && ship.side === world.playerSide) {
       var healT = Math.max(0, D.DC_INTERVAL - (ship._healT || 0));
@@ -1773,6 +1785,15 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span>夜间、雾雨、海况差都会<b>提高丢包率</b>（延迟不变），干扰可叠加；左栏「链路」写着当前丢包率</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>敌我识别器有 <b>1%</b> 概率认错；<b>电台</b>或<b>识别器</b>被炮弹打掉就彻底不能用了</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>指挥舰被打沉会<b>指挥中断</b>几十秒，然后由下一艘大舰接替</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>射界遮挡</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>岛会挡住炮</b>：山有几百米高，炮弹翻不过去。隔着岛的目标打不了，战报会写「射界被「科隆班加拉」挡住」</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>自己人也会挡住炮口</b>：但只在<b>近距离平射</b>时 —— 10 km 上打出去的炮弹飞到 500 m 处已经在 80 m 高空，从友舰头顶过去了；3 km 内的平射才会被巡洋舰以上的舰体挡住</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>被挡住时详情面板「射界」一栏变红，选中该舰后航向环上的目标方位会打一个<b>红叉</b>并写出是谁挡的</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>炮击岸上目标同样要看射界：目标躲在山背后就是打不到</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>误伤</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>炮弹不认识旗子。</b>打偏了落在自己人身上一样穿个洞 —— 炮弹命中不分敌我，只有近失弹只算敌方（编队密集时自己人的齐射天天从头顶过）</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>识别器失灵时会真的打自己人</b>：这条船正在交战、附近有友舰、识别器又坏了，就有 <b>10%</b> 的概率（正常时 1%）把友舰当成敌舰，调转炮口打上 30 秒左右</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>战报会写「⚠ 长良 的识别器失灵：把「村雨」当成了敌舰，正在开火！」，纠正时写「✓ 认出是自己人」。<b>鱼雷不会误射</b> —— 发射前必须确认目标</span></div>' +
       '<div class="obj-head" style="margin-top:12px"><span>态势融合与误差传递</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>同一艘敌舰往往同时有雷达、瞭望、隔壁舰好几份报告。<b>它们会被加权融合</b>，不是谁后到听谁的 —— 误差小的那份说了算，融合后的圈一定比单份小</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>每条接触都标着<b>来源</b>（<b>雷达</b>／<b>目视</b>／<b>雷达+目视</b>／<b>电探</b>）、<b>±误差</b>和<b>多少秒前的定解</b>。这三个数字比舰名重要</span></div>' +
