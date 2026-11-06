@@ -101,8 +101,14 @@
         if (N.Weather) rRange *= N.Weather.radarFactor(world) * N.Weather.seaClutter(world, target);
         if (range < rRange) {
           radarOk = true;
+          // 雷达的两个方向差得很远：测距准（1%），测向糊（2~4°）。
+          // 分开存，画出来才是一条细长的椭圆，而不是一个圆。
+          var rErr = Math.max(60, range * (r.rangeErr / 10000));
+          var rCross = Math.max(60, range * Math.tan(r.bearingErr * U.DEG));
           radarObs = {
-            posErr: Math.max(120, range * (r.rangeErr / 10000) + range * Math.tan(r.bearingErr * U.DEG)),
+            errR: rErr,
+            errC: rCross,
+            posErr: Math.max(120, Math.max(rErr, rCross)),
             brgErr: r.bearingErr,
             rangeErr: r.rangeErr
           };
@@ -142,6 +148,8 @@
         var rangeFrac = 0.02 + 0.06 * U.clamp01(range / Math.max(6000, vis));
         if (lit) rangeFrac *= 0.6;   // 被照明弹照亮时测距明显更准
         visualObs = {
+          errR: Math.max(90, range * rangeFrac),
+          errC: Math.max(60, range * Math.tan(0.8 * U.DEG)),
           posErr: Math.max(90, range * rangeFrac * 0.75 + range * Math.tan(0.8 * U.DEG)),
           brgErr: 0.8,
           rangeErr: range * rangeFrac
@@ -165,6 +173,8 @@
             esmOk = true;
             esmObs = {
               // 方位很准，距离只能估到 ±45%，两者合成一个很大的圆
+              errR: Math.max(1800, range * esmCfg.rangeFrac),
+              errC: Math.max(200, range * Math.tan(esmCfg.bearingErr * U.DEG)),
               posErr: Math.max(1800, range * esmCfg.rangeFrac),
               brgErr: esmCfg.bearingErr,
               rangeErr: range * esmCfg.rangeFrac
@@ -203,6 +213,10 @@
           : (visualOk ? 'visual'
             : (radarOk ? 'radar' : 'esm')),
         posErr: best.posErr,
+        errR: best.errR || best.posErr,
+        errC: best.errC || best.posErr,
+        // 椭圆的长轴是"测距方向"，也就是从观察者到目标的方位
+        axis: bearing,
         brgErr: best.brgErr,
         rangeErr: best.rangeErr,
         visual: visualOk,
@@ -211,6 +225,200 @@
         // 只有电探看到：方位很准，距离基本靠猜
         esmOnly: esmOk && !radarOk && !visualOk
       };
+    },
+
+    /* ======================================================================
+     *  雷达的"一坨"
+     *
+     *  雷达不是照相机。它给的是「某个方位上、某个距离上有一个回波」。
+     *  两条舰挨得比天线波束还近的时候，屏幕上只有一个亮点 —— 操作手
+     *  根本不知道那是几条船。只有瞭望哨数得清。
+     *
+     *  所以"只有雷达"的接触必须先**聚类**：落在同一个分辨率单元里的几条船
+     *  合成一条「雷达接触」，位置取回波的重心，圈要能把整个单元包住。
+     *  这条接触从此没有"艘数"这个概念（countKnown = false）。
+     *
+     *  不同舰的雷达也不一样：天线大的测向准，小艇上的测向糊；运输舰装的是
+     *  对空警戒的 SC，海面上一塌糊涂。这些都写在 ships.js 的 radar 里。
+     * ====================================================================== */
+
+    /** 两个方位之间的夹角（度，0~180） */
+    angDiff: function (a, b) {
+      var d = ((a - b) % 360 + 540) % 360 - 180;
+      return d < 0 ? -d : d;
+    },
+
+    /** 这条船的雷达分辨率单元（米 / 度） */
+    radarCell: function (ship) {
+      var r = ship && ship.cls ? ship.cls.radar : null;
+      if (!r) return null;
+      return {
+        rangeRes: r.rangeRes || 400,
+        bearingRes: r.bearingRes || 4.0
+      };
+    },
+
+    /**
+     * 一次"扫描"：把这艘舰这一瞬间看到的全部目标，整理成**回波**。
+     * 目视/电探的接触一条一个（看得见就能数）；
+     * 只有雷达的，按分辨率单元聚成一坨。
+     */
+    scan: function (world, observer, targets) {
+      var rng = world.rng;
+      var list = [], i, o;
+      for (i = 0; i < targets.length; i++) {
+        o = Sensors.observe(observer, targets[i], world);
+        if (o) { o.tgt = targets[i]; list.push(o); }
+      }
+
+      // 被海杂波糊住 / 操作手跟丢了一阵：这几秒雷达上什么都没有
+      var blind = world.time < (observer._blindUntil || 0);
+
+      var echoes = [], radarOnly = [];
+      for (i = 0; i < list.length; i++) {
+        o = list[i];
+        if (blind && o.source === 'radar') continue;
+        if (o.visual || o.esm) echoes.push(Sensors.singleEcho(world, o));
+        else radarOnly.push(o);
+      }
+
+      // ---- 聚类 ----
+      var cell = Sensors.radarCell(observer);
+      if (cell && radarOnly.length) {
+        var used = [];
+        for (i = 0; i < radarOnly.length; i++) {
+          if (used[i]) continue;
+          var group = [radarOnly[i]];
+          used[i] = 1;
+          for (var j = i + 1; j < radarOnly.length; j++) {
+            if (used[j]) continue;
+            var a = radarOnly[i], b = radarOnly[j];
+            if (Math.abs(a.range - b.range) < cell.rangeRes &&
+              Sensors.angDiff(a.bearing, b.bearing) < cell.bearingRes) {
+              group.push(b);
+              used[j] = 1;
+            }
+          }
+          echoes.push(Sensors.clusterEcho(world, group));
+        }
+      } else {
+        for (i = 0; i < radarOnly.length; i++) echoes.push(Sensors.singleEcho(world, radarOnly[i]));
+      }
+
+      // ---- 假回波 ----
+      Sensors.stepClutter(world, observer);
+      var ph = observer._phantoms || [];
+      for (i = 0; i < ph.length; i++) {
+        if (world.time <= ph[i].until) echoes.push(ph[i]);
+      }
+      return echoes;
+    },
+
+    /** 一条独立的接触（看得见，或者只是单条船的回波） */
+    singleEcho: function (world, o) {
+      var rng = world.rng;
+      return {
+        key: o.tgt.id,
+        members: [o.tgt.id],
+        count: 1, countKnown: true,
+        pos: Geo.dest(o.tgt.pos, o.bearing + rng.dev(o.brgErr), rng.dev(o.posErr)),
+        posErr: o.posErr, errR: o.errR, errC: o.errC, axis: o.bearing,
+        range: o.range, bearing: o.bearing,
+        idLevel: o.idLevel, source: o.source,
+        esmOnly: !!o.esmOnly, visual: o.visual, radar: o.radar, esm: o.esm,
+        tgt: o.tgt
+      };
+    },
+
+    /** 几条船挤在一个分辨率单元里：雷达上只有一个亮点 */
+    clusterEcho: function (world, group) {
+      var rng = world.rng;
+      var reps = [], sx = 0, sy = 0, i, o, rep;
+      for (i = 0; i < group.length; i++) {
+        o = group[i];
+        rep = Geo.dest(o.tgt.pos, o.bearing + rng.dev(o.brgErr), rng.dev(o.posErr));
+        reps.push(rep);
+        sx += rep.x; sy += rep.y;
+      }
+      var c = { x: sx / group.length, y: sy / group.length };
+      var spread = 0, maxErr = 0;
+      for (i = 0; i < group.length; i++) {
+        spread = Math.max(spread, V.dist(c, reps[i]));
+        maxErr = Math.max(maxErr, group[i].posErr);
+      }
+      var members = [];
+      for (i = 0; i < group.length; i++) members.push(group[i].tgt.id);
+      var g0 = group[0];
+      return {
+        key: members[0],
+        members: members,
+        count: members.length,
+        countKnown: members.length === 1,
+        pos: c,
+        posErr: maxErr + spread,
+        errR: g0.errR + spread, errC: g0.errC + spread, axis: g0.bearing,
+        range: g0.range, bearing: g0.bearing,
+        // 一坨回波既分不出舰种，也数不清几条
+        idLevel: ID.SURFACE,
+        source: 'radar',
+        esmOnly: false, visual: false, radar: true, esm: false,
+        tgt: members.length === 1 ? g0.tgt : null
+      };
+    },
+
+    /**
+     * 随机干扰：海杂波、二次回波、异常传播，以及"跟丢了一阵"。
+     * 海况越差、雨越大，假回波越多，也越容易暂时看不见。
+     */
+    stepClutter: function (world, observer) {
+      // 干扰用自己的一条随机流：它每十几秒就摇一次色子，混进战斗随机流里
+      // 会把设备故障、AI 抖动这些判定的序列整体推偏，整场结果就跑飞了。
+      if (!world.clutterRng) {
+        world.clutterRng = new N.RNG(((world.seedValue || 12345) ^ 0xC1A77E) >>> 0);
+      }
+      var rng = world.clutterRng;
+      if (!observer._phantoms) observer._phantoms = [];
+      var keep = [];
+      for (var i = 0; i < observer._phantoms.length; i++) {
+        if (world.time <= observer._phantoms[i].until) keep.push(observer._phantoms[i]);
+      }
+      observer._phantoms = keep;
+
+      var r = observer.cls.radar;
+      if (!r || (N.Damage && !N.Damage.radarOk(observer))) return;
+
+      if (world.time < (observer._nextClutter || 0)) return;
+      // 定时器用固定的错峰，不摇色子 —— 每帧都消耗随机数会把整场的随机流推偏，
+      // 后面所有靠随机数做的判定（设备故障、AI 抖动）都会跟着漂。
+      observer._nextClutter = world.time + 14 + ((observer._clutterPhase || 0) % 22);
+      observer._clutterPhase = (observer._clutterPhase || 0) + 7;
+
+      var wx = world.weather || {};
+      var sea = wx.seaState || 2, rain = wx.rain || 0;
+      var p = 0.10 + 0.05 * Math.max(0, sea - 2) + 0.12 * rain;
+      if (!rng.chance(p)) return;
+
+      if (rng.chance(0.45)) {
+        // 跟丢：这几秒屏幕上干干净净，接触只能靠外推
+        observer._blindUntil = world.time + 3 + rng.range(0, 6);
+        return;
+      }
+      // 假回波：一个漂在海上的亮点，过十几秒自己消失
+      var brg = rng.range(0, 360);
+      var dist = rng.range(4000, Math.min(r.range, 26000) * 0.85);
+      observer._phantomSeq = (observer._phantomSeq || 0) + 1;
+      observer._phantoms.push({
+        key: 'P' + observer._phantomSeq,
+        members: [], count: 0, countKnown: false,
+        pos: Geo.dest(observer.pos, brg, dist),
+        posErr: 900 + dist * 0.04,
+        errR: 400, errC: dist * 0.05, axis: brg,
+        range: dist, bearing: brg,
+        idLevel: ID.SURFACE, source: 'radar',
+        esmOnly: false, visual: false, radar: true, esm: false,
+        phantom: true, tgt: null,
+        until: world.time + 12 + rng.range(0, 14)
+      });
     },
 
     /**
@@ -228,9 +436,16 @@
       for (var j = 0; j < observers.length; j++) {
         var observer = observers[j];
         if (!observer.ownTracks) observer.ownTracks = {};
-        for (var i = 0; i < targets.length; i++) {
-          var obs = Sensors.observe(observer, targets[i], world);
-          Sensors.fuse(world, observer.ownTracks, targets[i], obs, dt, side, observer);
+        var echoes = Sensors.scan(world, observer, targets);
+        var seen = {};
+        for (var i = 0; i < echoes.length; i++) {
+          seen[echoes[i].key] = 1;
+          Sensors.fuse(world, observer.ownTracks, echoes[i], dt, side, observer);
+        }
+        // 这一轮没看到的，按最后定解点外推
+        for (var k in observer.ownTracks) {
+          if (seen[k]) continue;
+          Sensors.decay(world, observer.ownTracks, k, dt);
         }
       }
 
@@ -239,107 +454,133 @@
     },
 
     /**
-     * 把一次观测并进一张航迹表。
+     * 把一条回波并进一张航迹表。
      * @param {Object} map    航迹表（本舰 ownTracks，或指挥舰的态势图）
      * @param {string} owner  这张表属于哪一方
      */
-    fuse: function (world, map, tgt, obs, dt, owner, observer) {
+    fuse: function (world, map, echo, dt, owner, observer) {
       var rng = world.rng;
-      var tr = map[tgt.id];
+      if (!echo) return null;
+      var key = echo.key;
+      var tr = map[key];
       if (!tr) {
-        if (!obs) return null;
-        tr = map[tgt.id] = {
-          id: tgt.id,
+        tr = map[key] = {
+          id: key,
           side: owner,
-          pos: { x: 0, y: 0 },
+          pos: { x: echo.pos.x, y: echo.pos.y },
           course: 0,
           speed: 0,
-          uncertainty: 0,
-          idLevel: 0,
+          uncertainty: echo.posErr,
+          errR: echo.errR, errC: echo.errC, axis: echo.axis,
+          idLevel: echo.idLevel,
           typeGuess: null,
           classGuess: null,
           nameGuess: null,
           misId: false,
+          members: echo.members.slice(),
+          count: echo.count,
+          countKnown: echo.countKnown,
+          phantom: !!echo.phantom,
+          fromPlane: echo.fromPlane || null,
           lastSeen: world.time,
           firstSeen: world.time,
           seenBy: observer ? observer.id : null,
           fixes: [],
           seenThisTick: true,
-          source: obs ? obs.source : 'visual'
+          source: echo.source
         };
       }
 
-      if (obs) {
-        /* ---- 电探只是方位：已经有更好的定位时，别让它把位置拽偏 ----
-         * 电探的"位置"是沿方位线猜出来的，误差几公里。如果本舰已经有
-         * 望远镜或雷达的实定位，正确的做法是拿这条方位线去校核，而不是覆盖。 */
-        if (obs.esmOnly && tr.fix && tr.source !== 'esm' && tr.uncertainty < obs.posErr) {
-          tr.esmFix = (tr.esmFix || 0) + 1;
-          tr.uncertainty = Math.max(120, tr.uncertainty * 0.88);
-          tr.esmAt = world.time;
-          return tr;
-        }
+      // 这一坨里换人了：旧的定解点没用了，重新开始
+      if (echo.members.length !== tr.members.length ||
+        echo.members.some(function (m) { return tr.members.indexOf(m) < 0; })) {
+        tr.fixes.length = 0;
+      }
+      tr.members = echo.members.slice();
+      tr.count = echo.count;
+      tr.countKnown = echo.countKnown;
+      tr.phantom = !!echo.phantom;
+      if (echo.fromPlane) tr.fromPlane = echo.fromPlane;
+      else if (!tr.fromPlane) tr.fromPlane = null;
 
-        // ---- 有观测：更新位置（带误差） ----
-        var errPos = Geo.dest(tgt.pos, obs.bearing + rng.dev(obs.brgErr), rng.dev(obs.posErr));
-        tr.pos = errPos;
-        tr.uncertainty = Math.max(120, obs.posErr * 1.1);
-        tr.lastSeen = world.time;
-        tr.observedAt = world.time;
-        tr.seenBy = observer ? observer.id : tr.seenBy;
-        tr.seenThisTick = true;
-        tr.source = obs.source;
-        tr.esmOnly = !!obs.esmOnly;
-        // 定解点：本舰自己的观测是即时的，t 就是现在
-        tr.fix = { x: errPos.x, y: errPos.y, t: world.time, err: Math.max(120, obs.posErr) };
+      /* ---- 电探只是方位：已经有更好的定位时，别让它把位置拽偏 ----
+       * 电探的"位置"是沿方位线猜出来的，误差几公里。如果本舰已经有
+       * 望远镜或雷达的实定位，正确的做法是拿这条方位线去校核，而不是覆盖。 */
+      if (echo.esmOnly && tr.fix && tr.source !== 'esm' && tr.uncertainty < echo.posErr) {
+        tr.esmFix = (tr.esmFix || 0) + 1;
+        tr.uncertainty = Math.max(120, tr.uncertainty * 0.88);
+        tr.esmAt = world.time;
+        return tr;
+      }
 
-        // ---- 识别 ----
-        if (obs.idLevel > tr.idLevel) {
-          tr.idLevel = obs.idLevel;
-          if (tr.idLevel >= ID.TYPE && !tr.typeGuess) {
-            tr.typeGuess = tgt.cls.type;
-            // 一定概率误判舰种（史实中并不少见）
-            if (tr.idLevel < ID.CONFIRMED && rng.chance(0.12)) {
-              tr.misId = true;
-              tr.typeGuess = (tgt.cls.type === 'DD') ? 'CL' : (tgt.cls.type === 'CA' ? 'CL' : 'DD');
-            }
-          }
-          if (tr.idLevel >= ID.CLASS) {
-            tr.classGuess = tgt.cls.name;
-            if (tr.idLevel >= ID.CONFIRMED) { tr.nameGuess = tgt.name; tr.misId = false; }
-          }
-        }
+      // ---- 有观测：更新位置（带误差） ----
+      tr.pos = { x: echo.pos.x, y: echo.pos.y };
+      tr.uncertainty = Math.max(120, echo.posErr * 1.1);
+      tr.errR = echo.errR; tr.errC = echo.errC; tr.axis = echo.axis;
+      tr.lastSeen = world.time;
+      tr.observedAt = world.time;
+      tr.seenBy = observer ? observer.id : tr.seenBy;
+      tr.seenThisTick = true;
+      tr.source = echo.source;
+      tr.esmOnly = !!echo.esmOnly;
+      tr.fix = { x: tr.pos.x, y: tr.pos.y, t: world.time, err: Math.max(120, echo.posErr) };
 
-        // ---- 由连续定位推算航向航速（带噪声） ----
-        tr.fixes.push({ t: world.time, x: tr.pos.x, y: tr.pos.y });
-        if (tr.fixes.length > 6) tr.fixes.shift();
-        if (tr.fixes.length >= 2) {
-          var f0 = tr.fixes[0], f1 = tr.fixes[tr.fixes.length - 1];
-          var dtf = f1.t - f0.t;
-          if (dtf > 6) {
-            var d = V.dist(f0, f1);
-            var noiseF = U.clamp(tr.uncertainty / 800, 0.5, 3);
-            tr.course = U.norm360(Geo.bearing(f0, f1) + rng.dev(1.6 * noiseF));
-            tr.speed = U.clamp(d / dtf / U.KNOT_MS + rng.dev(0.8 * noiseF), 0, 40);
+      // ---- 识别：只有"看得见的那一条船"才谈得上识别 ----
+      if (echo.tgt && echo.idLevel > tr.idLevel) {
+        var tgt = echo.tgt;
+        tr.idLevel = echo.idLevel;
+        if (tr.idLevel >= ID.TYPE && !tr.typeGuess) {
+          tr.typeGuess = tgt.cls.type;
+          // 一定概率误判舰种（史实中并不少见）
+          if (tr.idLevel < ID.CONFIRMED && rng.chance(0.12)) {
+            tr.misId = true;
+            tr.typeGuess = (tgt.cls.type === 'DD') ? 'CL' : (tgt.cls.type === 'CA' ? 'CL' : 'DD');
           }
         }
+        if (tr.idLevel >= ID.CLASS) {
+          tr.classGuess = tgt.cls.name;
+          if (tr.idLevel >= ID.CONFIRMED) { tr.nameGuess = tgt.name; tr.misId = false; }
+        }
+      }
+
+      // ---- 由连续定位推算航向航速（带噪声） ----
+      tr.fixes.push({ t: world.time, x: tr.pos.x, y: tr.pos.y });
+      if (tr.fixes.length > 6) tr.fixes.shift();
+      if (tr.fixes.length >= 2) {
+        var f0 = tr.fixes[0], f1 = tr.fixes[tr.fixes.length - 1];
+        var dtf = f1.t - f0.t;
+        if (dtf > 6) {
+          var d = V.dist(f0, f1);
+          var noiseF = U.clamp(tr.uncertainty / 800, 0.5, 3);
+          tr.course = U.norm360(Geo.bearing(f0, f1) + rng.dev(1.6 * noiseF));
+          tr.speed = U.clamp(d / dtf / U.KNOT_MS + rng.dev(0.8 * noiseF), 0, 40);
+        }
+      }
+      return tr;
+    },
+
+    /** 这一轮没有观测：从定解点按估算航向外推 */
+    decay: function (world, map, key, dt) {
+      var tr = map[key];
+      if (!tr) return null;
+      tr.seenThisTick = false;
+      var gap = world.time - tr.lastSeen;
+      if (gap > 900 || (tr.phantom && gap > 26)) { delete map[key]; return null; }
+      if (tr.fix) {
+        var v = Geo.headingVec(tr.course);
+        var step = tr.speed * U.KNOT_MS * (world.time - tr.fix.t);
+        tr.pos = { x: tr.fix.x + v.x * step, y: tr.fix.y + v.y * step };
+        var drift = (6 + tr.speed * U.KNOT_MS * 0.35) * (world.time - tr.fix.t);
+        tr.uncertainty = Math.min(9000, Math.sqrt(tr.fix.err * tr.fix.err + drift * drift));
+        tr.errR = tr.uncertainty;
+        tr.errC = tr.uncertainty;
       } else {
-        // ---- 无观测：从定解点按估算航向外推 ----
-        tr.seenThisTick = false;
-        var gap = world.time - tr.lastSeen;
-        if (gap > 900) { delete map[tgt.id]; return null; }
-        if (tr.fix) {
-          var v = Geo.headingVec(tr.course);
-          var step = tr.speed * U.KNOT_MS * (world.time - tr.fix.t);
-          tr.pos = { x: tr.fix.x + v.x * step, y: tr.fix.y + v.y * step };
-          var drift = (6 + tr.speed * U.KNOT_MS * 0.35) * (world.time - tr.fix.t);
-          tr.uncertainty = Math.min(9000, Math.sqrt(tr.fix.err * tr.fix.err + drift * drift));
-        } else {
-          var v2 = Geo.headingVec(tr.course);
-          var step2 = tr.speed * U.KNOT_MS * dt;
-          tr.pos = { x: tr.pos.x + v2.x * step2, y: tr.pos.y + v2.y * step2 };
-          tr.uncertainty = Math.min(9000, tr.uncertainty + 55 * dt);
-        }
+        var v2 = Geo.headingVec(tr.course);
+        var step2 = tr.speed * U.KNOT_MS * dt;
+        tr.pos = { x: tr.pos.x + v2.x * step2, y: tr.pos.y + v2.y * step2 };
+        tr.uncertainty = Math.min(9000, tr.uncertainty + 55 * dt);
+        tr.errR = tr.uncertainty;
+        tr.errC = tr.uncertainty;
       }
       return tr;
     },
@@ -374,6 +615,12 @@
     /** 识别等级文字 */
     idText: function (tr) {
       if (!tr) return '无接触';
+      // 雷达上的一坨：不知道几条船，也分不出舰种
+      if (tr.phantom) return '雷达接触 · 疑似假回波';
+      if (tr.source === 'floatplane') {
+        return '水侦情报 · ' + (tr.count || 1) + ' 艘（坐标不准）';
+      }
+      if (tr.countKnown === false) return '雷达接触 · 数量不明';
       switch (tr.idLevel) {
         case ID.SURFACE: return '水面目标';
         case ID.TYPE: return tr.misId ? ('疑似' + typeName(tr.typeGuess)) : typeName(tr.typeGuess);

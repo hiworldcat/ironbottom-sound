@@ -64,6 +64,7 @@
       hdgDial: $('hdgDial'),
       objectiveList: $('objectiveList'),
       btnStarshell: $('btnStarshell'),
+    btnFloatplane: $('btnFloatplane'),
       dTarget: $('dTarget'), dRange: $('dRange'), dFire: $('dFire'), dSpot: $('dSpot'),
       mountList: $('mountList'), torpList: $('torpList'), torpSection: $('torpSection'),
       torpNote: $('torpNote'),
@@ -105,6 +106,9 @@
     this.el.btnSmoke.addEventListener('click', function () { g.toggleSmoke(); });
     if (this.el.btnStarshell) {
       this.el.btnStarshell.addEventListener('click', function () { g.fireStarshell(); });
+    }
+    if (this.el.btnFloatplane) {
+      this.el.btnFloatplane.addEventListener('click', function () { g.launchFloatplane(); });
     }
     $('dClose').addEventListener('click', function () { g.clearSelection(); });
     this.bindPhoto();
@@ -1162,6 +1166,22 @@
         ? ('照明弹 ' + Math.ceil(scd) + 's')
         : ('照明弹 <kbd>L</kbd>');
     }
+
+    /* ---- 水上侦察机 ---- */
+    if (this.el.btnFloatplane) {
+      var fp = ship.cls ? ship.cls.floatplane : null;
+      if (!fp) {
+        this.el.btnFloatplane.classList.add('hidden');
+      } else {
+        this.el.btnFloatplane.classList.remove('hidden');
+        var chk = (N.Floatplane && !locked) ? N.Floatplane.canLaunch(world, ship) : { ok: false, reason: '' };
+        var leftN = (ship.floatplanes == null) ? fp.count : ship.floatplanes;
+        this.el.btnFloatplane.disabled = locked || !chk.ok;
+        this.el.btnFloatplane.innerHTML = ship.airborne
+          ? ('水侦在空中 · ' + leftN + ' 架待用')
+          : (chk.ok ? ('弹射水侦 · ' + leftN + ' 架') : ('水侦：' + (chk.reason || '不可用')));
+      }
+    }
   };
 
   /* ---------------------------------------------------------------- 接触 */
@@ -1170,7 +1190,11 @@
     var ref = world.playerReference();
     list.sort(function (a, b) { return V.dist(ref, a.pos) - V.dist(ref, b.pos); });
 
-    this.el.contactCount.textContent = list.length + ' 个';
+    this.el.contactCount.textContent = (function () {
+      var vague = 0;
+      for (var i = 0; i < list.length; i++) if (list[i].countKnown === false) vague++;
+      return list.length + ' 个' + (vague ? '（' + vague + ' 个数量不明）' : '');
+    })();
 
     if (list.length === 0) {
       this.el.contacts.innerHTML = '<div class="contact-empty">暂无接触</div>';
@@ -1794,6 +1818,20 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>炮弹不认识旗子。</b>打偏了落在自己人身上一样穿个洞 —— 炮弹命中不分敌我，只有近失弹只算敌方（编队密集时自己人的齐射天天从头顶过）</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>识别器失灵时会真的打自己人</b>：这条船正在交战、附近有友舰、识别器又坏了，就有 <b>10%</b> 的概率（正常时 1%）把友舰当成敌舰，调转炮口打上 30 秒左右</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>战报会写「⚠ 长良 的识别器失灵：把「村雨」当成了敌舰，正在开火！」，纠正时写「✓ 认出是自己人」。<b>鱼雷不会误射</b> —— 发射前必须确认目标</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>雷达：它只看得见「一坨」</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>雷达<b>不是照相机</b>。它给的是「某个方位上、某个距离上有一个回波」。两条舰挨得比天线波束还近时，<b>屏幕上只有一个亮点</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>所以雷达接触标的是<b>「雷达接触 · 数量不明」</b>，左下角接触栏会写「3 个（1 个数量不明）」。<b>几条船要瞭望哨去数</b> —— 看见之后才会变成「驱逐舰 ×1」这种确定的说法</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>误差圈是<b>椭圆</b>，不是圆：<b>测距准（约 1%）、测向糊（2~4°）</b>。20 km 上测距只差 180 m，横向却能差 900 m —— 长轴永远指着你自己，因为那是"距离"方向</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>不同舰的雷达不一样</b>：<b>新奥尔良</b>天线最大，2.6°；<b>弗莱彻</b>是桅顶小天线，4.4°，连分辨率单元都大一圈；<b>运输舰</b>装的是对空警戒的 SC，9.5°、单元 900 m —— 海面上基本一塌糊涂</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>随机干扰</b>：海况越差、雨越大，屏幕上越容易冒<b>假回波</b>（标「疑似假回波」，十几秒自己消失），也越容易<b>跟丢一阵</b>（几秒内什么都没有，接触只能靠外推，圈一直涨）</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>假回波<b>不会骗 AI</b>：指挥长不会带着战列线去追一团海杂波；但<b>你自己</b>可以对它开炮，炮弹就白扔了</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>水上侦察机</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>部分任务里，<b>巡洋舰带弹射器和 1~4 架水侦</b>（美军 OS2U 翠鸟 / SOC 海鸥，日军零式水侦）。开战一分半会自动弹一架，也可以点详情面板的「弹射水侦」手动放</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>放不出去的时候很多</b>：海况 <b>&gt;3</b> 收放不了、能见度 &lt;5 km 起飞没意义、<b>无月之夜</b>飞行员看不见海面、航速 &gt;28 节弹射器用不了。按钮上直接写着为什么不能放</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>它出航 30 km 后开始来回搜索，<b>搜索圈是虚的</b>，只说明飞机此刻能看多远。它飞得比雷达近，但能绕到雷达看不见的那一面去</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>报回来的是文字，不是航迹</b>：「水侦报告：南纬 8.30° 东经 157.05° 附近发现敌舰 3 艘，航向 180°，航速 24 节」</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>而且<b>这三样都不准</b>：坐标是飞行员在图上点出来的，误差一公里起步、飞得越远越糊；<b>船数可能多报或少报一条</b>；航向航速是估的</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>水侦接触的圈很大，<b>只能用来往那个方向去堵</b>，不能拿来开炮。留空 25 分钟，回来能再放；母舰沉了，飞机也就没了</span></div>' +
       '<div class="obj-head" style="margin-top:12px"><span>态势融合与误差传递</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>同一艘敌舰往往同时有雷达、瞭望、隔壁舰好几份报告。<b>它们会被加权融合</b>，不是谁后到听谁的 —— 误差小的那份说了算，融合后的圈一定比单份小</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>每条接触都标着<b>来源</b>（<b>雷达</b>／<b>目视</b>／<b>雷达+目视</b>／<b>电探</b>）、<b>±误差</b>和<b>多少秒前的定解</b>。这三个数字比舰名重要</span></div>' +

@@ -38,6 +38,7 @@
     this.starshells = [];
     this.salvoes = {};
     this.messages = [];
+    this.planes = [];                        // 水上侦察机（floatplane.js）
 
     /* 场景要素：区域与岸上目标 */
     this.zones = (scenario.zones || []).map(function (z) {
@@ -151,6 +152,9 @@
 
     /* 指挥体系：选出双方的指挥舰 */
     if (N.Command) N.Command.init(this);
+
+    /* 水上侦察机：给带弹射器的巡洋舰补上机库 */
+    if (N.Floatplane) N.Floatplane.init(this);
 
     /* 录像（在首条战报之前创建，保证事件完整） */
     this.recorder = opts.noRecord ? null : new N.Recorder(this, {
@@ -756,6 +760,9 @@
     N.Sensors.updateTracks(this, 'US', dt);
     N.Sensors.updateTracks(this, 'JP', dt);
 
+    /* 4b. 水上侦察机（它报回来的东西进态势图，所以要在传感器之后） */
+    if (N.Floatplane) N.Floatplane.update(this, dt);
+
     /* 5. 战斗 */
     N.Combat.update(this, dt);
     this.updateTorpedoSpotting(dt);
@@ -800,12 +807,25 @@
       var prev = this._known[key];
       if (!prev) {
         this._known[key] = { idLevel: tr.idLevel, name: null };
-        var src = tr.source === 'radar' ? '雷达' : (tr.source === 'both' ? '雷达与瞭望' : '瞭望');
+        if (tr.phantom) {
+          // 假回波：操作手在屏幕上看到一个亮点，报了，但谁也不敢当真
+          this.log(this.playerSide,
+            '雷达上出现一个可疑回波：方位 ' +
+            Math.round(Geo.bearing(this.playerReference(), tr.pos)) + '°，距离 ' +
+            U.fmtRange(V.dist(this.playerReference(), tr.pos)) + '（可能是海杂波）',
+            'warn');
+          continue;
+        }
+        var src = tr.source === 'radar' ? '雷达'
+          : (tr.source === 'both' ? '雷达与瞭望'
+            : (tr.source === 'floatplane' ? '水侦' : '瞭望'));
         // 这条接触是谁报上来的（视距外就是无线电，会晚几十秒）
         var via = tr.via ? '（' + tr.via + ' 报：' + src + '）' : '（' + src + '）';
+        // 雷达只看得见"一坨"，几条船要瞭望哨去数
+        var cnt = tr.countKnown === false ? '，数量不明' : '';
         this.log(this.playerSide,
           '发现新目标' + via + '：方位 ' + Math.round(Geo.bearing(this.playerReference(), tr.pos)) +
-          '°，距离 ' + U.fmtRange(V.dist(this.playerReference(), tr.pos)),
+          '°，距离 ' + U.fmtRange(V.dist(this.playerReference(), tr.pos)) + cnt,
           'contact');
       } else if (tr.idLevel > prev.idLevel) {
         prev.idLevel = tr.idLevel;

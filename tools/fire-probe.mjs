@@ -121,8 +121,8 @@ console.log('\n[4] 识别器失灵 → 打自己人');
   shooter.iffDestroyed = true;
   shooter.pos = { x: 0, y: 0 };
   victim.pos = { x: 4000, y: 0 };
-  // 其它友舰也拉近，否则候选列表是空的
-  us.forEach((s, i) => { if (s !== shooter && s !== victim) s.pos = { x: 3000 + i * 300, y: 2000 }; });
+  // 其它友舰挪到 22 km 以外，让候选只有 victim 一艘 —— 误判对象就唯一确定了
+  us.forEach((s, i) => { if (s !== shooter && s !== victim) s.pos = { x: 60000 + i * 3000, y: 60000 }; });
   let got = null;
   for (let i = 0; i < 4000 && !got; i++) {
     N.Command.checkMisId(w, shooter.side);

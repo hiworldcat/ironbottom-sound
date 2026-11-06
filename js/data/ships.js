@@ -107,7 +107,9 @@
         { label: '1', pos: 0.10, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' },
         { label: '2', pos: -0.18, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' }
       ],
-      radar: { name: 'SG 对海雷达', range: 26000, bearingErr: 2.5, rangeErr: 90 },
+      radar: { name: 'SG 对海雷达', range: 26000, bearingErr: 2.2, rangeErr: 85,
+        rangeRes: 230, bearingRes: 2.6 },
+      floatplane: { name: 'OS2U 翠鸟', count: 4 },
       fc: { name: 'Mk 3 火控雷达 + Mk 27 指挥仪', quality: 0.84, radarAssist: true },
       combatPower: 100
     },
@@ -131,7 +133,9 @@
         { label: '1', pos: 0.05, tubes: 5, torp: 'mk15', reload: 260, arc: 'broadside' },
         { label: '2', pos: -0.12, tubes: 5, torp: 'mk15', reload: 260, arc: 'broadside' }
       ],
-      radar: { name: 'SG 对海雷达', range: 25000, bearingErr: 2.5, rangeErr: 90 },
+      radar: { name: 'SG 对海雷达', range: 25000, bearingErr: 2.6, rangeErr: 95,
+        rangeRes: 280, bearingRes: 3.0 },
+      floatplane: { name: 'SOC 海鸥', count: 4 },
       fc: { name: 'Mk 3 火控雷达 + Mk 34 指挥仪', quality: 0.80, radarAssist: true },
       combatPower: 68
     },
@@ -152,7 +156,9 @@
         { label: 'Y', pos: -0.74, count: 3, gun: '6in47', arc: 'aft', armor: 165 }
       ],
       torps: [],
-      radar: { name: 'SG 对海雷达', range: 26000, bearingErr: 2.2, rangeErr: 85 },
+      radar: { name: 'SG 对海雷达', range: 26000, bearingErr: 2.1, rangeErr: 80,
+        rangeRes: 250, bearingRes: 2.8 },
+      floatplane: { name: 'OS2U 翠鸟', count: 4 },
       fc: { name: 'Mk 3 火控雷达 + Mk 34 指挥仪', quality: 0.82, radarAssist: true },
       combatPower: 72
     },
@@ -176,7 +182,8 @@
         { label: '1', pos: 0.05, tubes: 5, torp: 'mk15', reload: 220, arc: 'broadside' },
         { label: '2', pos: -0.15, tubes: 5, torp: 'mk15', reload: 220, arc: 'broadside' }
       ],
-      radar: { name: 'SG 对海雷达', range: 22000, bearingErr: 3.0, rangeErr: 110 },
+      radar: { name: 'SG 对海雷达（桅顶小天线）', range: 22000, bearingErr: 3.4, rangeErr: 120,
+        rangeRes: 380, bearingRes: 4.4 },
       fc: { name: 'Mk 4 火控雷达 + Mk 37 指挥仪', quality: 0.74, radarAssist: true },
       combatPower: 26
     },
@@ -201,7 +208,9 @@
         { label: '1', pos: 0.06, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' },
         { label: '2', pos: -0.12, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' }
       ],
-      radar: { name: 'SG 对海雷达', range: 24000, bearingErr: 2.8, rangeErr: 100 },
+      radar: { name: 'SG 对海雷达', range: 24000, bearingErr: 3.0, rangeErr: 105,
+        rangeRes: 330, bearingRes: 3.7 },
+      floatplane: { name: 'SOC 海鸥', count: 2 },
       fc: { name: 'Mk 4 火控雷达 + Mk 37 指挥仪', quality: 0.78, radarAssist: true },
       combatPower: 58
     },
@@ -216,7 +225,11 @@
       engines: 2, hull: 92, floodCapacity: 150, damageControl: 0.8,
       mounts: [],
       torps: [],
-      radar: null,
+      // 运输舰装的是对空警戒的 SC：海面上基本是一塌糊涂
+      radar: {
+        name: 'SC 对空警戒雷达', range: 15000, bearingErr: 9.0, rangeErr: 400,
+        rangeRes: 900, bearingRes: 9.5
+      },
       fc: { name: '无火控', quality: 0.30, radarAssist: false },
       combatPower: 14
     },
@@ -269,6 +282,7 @@
         { label: '4', pos: -0.20, tubes: 3, torp: 'type93', reload: 300, arc: 'broadside' }
       ],
       radar: null,   // 1942 年日方水面舰艇基本无雷达
+      floatplane: { name: '零式水侦', count: 3 },
       fc: { name: '九四式方位盘（光学）', quality: 0.88, radarAssist: false },
       combatPower: 100
     },
@@ -295,6 +309,7 @@
         { label: '2', pos: -0.18, tubes: 4, torp: 'type93', reload: 280, arc: 'broadside' }
       ],
       radar: null,
+      floatplane: { name: '九四式水侦', count: 1 },
       fc: { name: '九四式方位盘（光学）', quality: 0.80, radarAssist: false },
       combatPower: 52
     },

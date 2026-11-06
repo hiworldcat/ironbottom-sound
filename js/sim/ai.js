@@ -83,6 +83,9 @@
       /* 电探给的只是方位，测不出距离 —— 打不了。AI 也不会拿它当目标，
          但可以照它那个方向开过去（那一段在 steer 里读航迹，不走这里）。 */
       if (tr.esmOnly) continue;
+      /* 假回波：海杂波和二次回波也会在屏幕上留一个亮点。舰上的人不会
+         拿一个没有航向、忽大忽小的点当目标，AI 也不该去追。 */
+      if (tr.phantom) continue;
       var sc = targetScore(world, ship, tr);
       if (sc > bestScore) { bestScore = sc; best = tr; }
     }
@@ -202,6 +205,7 @@
     var list = N.Sensors.trackList(world, ship.side);
     var best = null, bestD = maxDist;
     for (var i = 0; i < list.length; i++) {
+      if (list[i].phantom) continue;
       var d = V.dist(ship.pos, list[i].pos);
       if (d < bestD) { bestD = d; best = list[i]; }
     }

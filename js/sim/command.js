@@ -167,7 +167,7 @@
    *  注意：舰上的字段叫 ffTrack（friendly-fire），和航迹上原有的 misId
    *  （认错舰种）是两回事，别混。
    * ========================================================================== */
-  var MISID = { life: 30, every: 90, err: 25 };
+  var MISID = { life: 20, every: 130, err: 25 };
 
   /** 这条船此刻正在把自己的哪条友舰当成敌人 */
   function misIdOf(ship) {
@@ -186,6 +186,12 @@
   }
 
   function checkMisId(world, side) {
+    // 敌我识别的色子用自己的一条随机流：它每分多钟就摇一次，混进战斗随机流
+    // 会把别处的判定整体推偏，误判率也就跟着漂了。
+    if (!world.iffRng) {
+      world.iffRng = new N.RNG(((world.seedValue || 12345) ^ 0x1FF1FF) >>> 0);
+    }
+    var irng = world.iffRng;
     for (var i = 0; i < world.ships.length; i++) {
       var ship = world.ships[i];
       if (ship.side !== side || !ship.alive || ship.sunk) continue;
@@ -203,11 +209,11 @@
 
       if (world.time < (ship._nextMisCheck || 0)) continue;
       var down = !iffOk(ship);
-      ship._nextMisCheck = world.time + MISID.every * world.rng.range(0.7, 1.4);
+      ship._nextMisCheck = world.time + MISID.every * irng.range(0.7, 1.4);
       if (!ship.engage) continue;
 
       var p = down ? 0.10 : (N.Damage ? N.Damage.iffError(ship) : DEFAULTS.iffError);
-      if (!world.rng.chance(p)) continue;
+      if (!irng.chance(p)) continue;
 
       // 挑一艘附近的友舰
       var cand = [];
@@ -219,7 +225,7 @@
         cand.push(s);
       }
       if (!cand.length) continue;
-      var victim = world.rng.pick(cand);
+      var victim = irng.pick(cand);
       forceMisId(world, ship, victim, down);
     }
   }
@@ -418,7 +424,8 @@
       var own = ship.ownTracks || {};
       for (var k in own) {
         var tr = own[k];
-        if (world.time - tr.lastSeen > 20) continue;
+        // 水侦报告每分多钟才来一次，不能按"20 秒没看见就作废"处理
+        if (world.time - tr.lastSeen > (tr.fromPlane ? 150 : 20)) continue;
         /* 发出去的是"定解点"而不是当前外推点：
            定解点 = 最后一次真正看见它时算出来的位置（tr.fix），
            收报方自己按航向航速往前推。这样延迟多久，误差就涨多少。 */
@@ -437,6 +444,13 @@
           misId: tr.misId,
           source: tr.source,
           esmOnly: !!tr.esmOnly,
+          // 这一坨里到底是几条船：雷达说不清，瞭望哨才数得清
+          members: tr.members ? tr.members.slice() : [tr.id],
+          count: tr.count || 1,
+          countKnown: tr.countKnown !== false,
+          phantom: !!tr.phantom,
+          fromPlane: tr.fromPlane || null,
+          errR: tr.errR, errC: tr.errC, axis: tr.axis,
           observedAt: fx.t
         });
       }
@@ -568,15 +582,27 @@
             pos: { x: o.pos.x, y: o.pos.y },
             course: o.course, speed: o.speed,
             uncertainty: o.posErr || o.uncertainty || 400,
+            errR: o.errR, errC: o.errC, axis: o.axis,
             idLevel: 0,
             typeGuess: null, classGuess: null, nameGuess: null,
             misId: false, lastSeen: o.observedAt, firstSeen: world.time,
             seenBy: p.from, fixes: [], seenThisTick: false,
             source: o.source, observedAt: o.observedAt, reportedAt: world.time,
             via: p.fromName, iff: 'unknown',
+            members: o.members || [o.id], count: o.count || 1,
+            countKnown: o.countKnown !== false, phantom: !!o.phantom,
+            fromPlane: o.fromPlane || null,
             contributors: {}, latency: 0, esmOnly: !!o.esmOnly, bestErr: 1e9
           };
         }
+
+        /* ---- 这一坨里是几条船、误差椭圆朝哪边 ---- */
+        if (o.members) tr.members = o.members.slice();
+        if (o.count) tr.count = o.count;
+        if (o.countKnown != null) tr.countKnown = !!o.countKnown;
+        if (o.phantom) tr.phantom = true;
+        if (o.fromPlane) tr.fromPlane = o.fromPlane;
+        if (o.errR) { tr.errR = o.errR; tr.errC = o.errC; tr.axis = o.axis; }
 
         /* ---- 这份报告在路上走了多久 ---- */
         var age = Math.max(0, world.time - o.observedAt);
@@ -804,6 +830,15 @@
       var st = cmd.roster[ship.id];
       if (!st) return null;
       return st;
+    }
+    // 上次是"亲眼看见"才标成实时的：现在看不见了，它就退化成一条旧报，
+    // 不能因为开局时离得近，就一直拿实时状态糊弄人。
+    if (r.exact && !inVisual(world, ship, flag)) {
+      var copy = {};
+      for (var k in r) copy[k] = r[k];
+      copy.exact = false;
+      copy.stale = true;
+      return copy;
     }
     return r;
   }

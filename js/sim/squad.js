@@ -654,6 +654,8 @@
     var near = null, nd = 1e9;
     for (var i = 0; i < pic.length; i++) {
       var t = pic[i];
+      // 假回波不是目标：指挥长不会带着整条战列线去追一团海杂波
+      if (t.phantom) continue;
       if (world.time - (t.observedAt || t.lastSeen || 0) > 240) continue;
       var d = V.dist(sq.anchor || cmdr.pos, t.pos);
       if (d < nd) { nd = d; near = t; }

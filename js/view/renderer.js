@@ -136,6 +136,7 @@
     this.drawSplashes(ctx, world, cam, W, H);
     this.drawSquads(ctx, world, cam, W, H);
     this.drawTracks(ctx, world, ui, cam, W, H);
+    this.drawPlanes(ctx, world, cam, W, H);
     this.drawShips(ctx, world, ui, cam, W, H);
     this.drawAttribution(ctx, world, cam, W, H);
     this.drawSelection(ctx, world, ui, cam, W, H);
@@ -633,9 +634,23 @@
         ctx.setLineDash([]);
       }
 
-      // 误差圈
+      // 误差圈。雷达的测距准、测向糊 —— 画出来是一条沿视线的细长椭圆，
+      // 而不是一个漂亮的圆。这就是雷达该有的样子。
+      var useEllipse = !esm && tr.errR > 0 && tr.errC > 0 && tr.axis != null &&
+        Math.abs(tr.errC - tr.errR) > tr.errR * 0.25;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, unc, 0, Math.PI * 2);
+      if (useEllipse) {
+        var aR = Math.max(10, tr.errR * cam.zoom);
+        var aC = Math.max(10, tr.errC * cam.zoom);
+        var rot = (tr.axis - 90) * DEG;      // 长轴沿视线方向
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(rot);
+        ctx.ellipse(0, 0, aC, aR, 0, 0, Math.PI * 2);
+        ctx.restore();
+      } else {
+        ctx.arc(s.x, s.y, unc, 0, Math.PI * 2);
+      }
       ctx.setLineDash([4, 5]);
       ctx.strokeStyle = selected ? 'rgba(255,255,255,0.55)'
         : (esm ? 'rgba(217,166,255,0.38)' : 'rgba(255,193,92,0.32)');
@@ -681,6 +696,11 @@
       var errTxt = tr.uncertainty >= 1000
         ? '±' + (tr.uncertainty / 1000).toFixed(1) + 'km'
         : '±' + Math.round(tr.uncertainty) + 'm';
+      // 椭圆的接触：把两个方向分开写，让人一眼看出"测距准、测向糊"
+      if (useEllipse) {
+        var f = function (v) { return v >= 1000 ? (v / 1000).toFixed(1) + 'km' : Math.round(v) + 'm'; };
+        errTxt = '测距±' + f(tr.errR) + ' 测向±' + f(tr.errC);
+      }
       ctx.font = '11px "Microsoft YaHei", system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -717,6 +737,77 @@
     ctx.fillStyle = 'rgba(255,120,99,0.12)';
     ctx.fill();
     ctx.restore();
+  };
+
+  /* ------------------------------------------------------------- 水上侦察机 */
+  /**
+   * 水侦画成一个小飞机 + 一条淡淡的航迹，外面套一圈"飞行员能看多远"的
+   * 搜索圈。圈是虚的：它只说明飞机此刻能看见的范围，不是雷达覆盖。
+   */
+  Renderer.prototype.drawPlanes = function (ctx, world, cam, W, H) {
+    if (!world.planes || !world.planes.length) return;
+    var own = world.playerSide;
+    for (var i = 0; i < world.planes.length; i++) {
+      var p = world.planes[i];
+      var s = cam.w2s(p.pos, W, H);
+      if (s.x < -120 || s.x > W + 120 || s.y < -120 || s.y > H + 120) continue;
+      var mine = p.side === own;
+      var col = mine ? 'rgba(150,220,255,0.95)' : 'rgba(255,150,150,0.9)';
+
+      // 航迹
+      if (p.trail && p.trail.length > 1) {
+        ctx.beginPath();
+        for (var k = 0; k < p.trail.length; k++) {
+          var ts = cam.w2s(p.trail[k], W, H);
+          if (k === 0) ctx.moveTo(ts.x, ts.y); else ctx.lineTo(ts.x, ts.y);
+        }
+        ctx.strokeStyle = mine ? 'rgba(150,220,255,0.22)' : 'rgba(255,150,150,0.18)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // 搜索圈
+      var sr = (N.Floatplane ? N.Floatplane.sightRange(world) : 20000) * cam.zoom;
+      if (sr > 20 && sr < Math.max(W, H) * 1.4) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, sr, 0, Math.PI * 2);
+        ctx.strokeStyle = mine ? 'rgba(150,220,255,0.13)' : 'rgba(255,150,150,0.10)';
+        ctx.setLineDash([2, 7]);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // 小飞机
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate((p.heading - 90) * DEG);
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(1.6, 0);
+      ctx.lineTo(6, 2.4);
+      ctx.lineTo(1.6, 3.4);
+      ctx.lineTo(0, 6);
+      ctx.lineTo(-1.6, 3.4);
+      ctx.lineTo(-6, 2.4);
+      ctx.lineTo(-1.6, 0);
+      ctx.closePath();
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.restore();
+
+      // 标注
+      if (cam.zoom > 0.03) {
+        ctx.font = '10px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = mine ? 'rgba(150,220,255,0.8)' : 'rgba(255,150,150,0.7)';
+        var st = p.state === 'back' ? '返航' : (p.state === 'search' ? '搜索' : '出航');
+        ctx.fillText(p.name + ' · ' + st, s.x + 9, s.y - 9);
+      }
+    }
   };
 
   /* -------------------------------------------------------------------- 舰艇 */

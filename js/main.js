@@ -108,10 +108,20 @@
   }
 
   /* ---------------------------------------------------------------- 开局 */
+
+  /** 随机种子：默认按时间取，?seed=N 可以钉住（录素材、复现问题用） */
+  function startSeed() {
+    var qs = '';
+    try { qs = (window.location && window.location.search) || ''; } catch (e) { qs = ''; }
+    var m = /[?&]seed=(\d+)/.exec(qs);
+    if (m) return (parseInt(m[1], 10) & 0x7fffffff) || 1;
+    return Date.now() & 0x7fffffff;
+  }
+
   function startScenario(scenario, chapter) {
     game.chapter = chapter || null;
     game.scenario = scenario;
-    game.world = new N.World(scenario, { seed: (Date.now() & 0x7fffffff) });
+    game.world = new N.World(scenario, { seed: startSeed() });
     game.selected.clear();
     game.selectedTrackId = null;
     game.showResultDone = false;
@@ -667,6 +677,32 @@
     } else if (why === 'cooldown') {
       game.hud.toast('照明弹装填中（25 秒）', 'warn');
     }
+  };
+
+  /* ---------------------------------------------------------------- 水侦 */
+  /**
+   * 给选中的（或全部可指挥的）带弹射器的巡洋舰弹一架水侦。
+   * 朝向：有目标就朝目标，没有就朝本舰航向。
+   */
+  game.launchFloatplane = function () {
+    var ships = commandable().filter(function (s) {
+      return s.cls && s.cls.floatplane;
+    });
+    if (!ships.length) {
+      game.hud.toast('选中的舰没有水上侦察机', 'warn');
+      return;
+    }
+    var n = 0, why = null;
+    ships.forEach(function (s) {
+      var brg = s.heading;
+      var tr = s.targetTrackId ? N.Sensors.trackFor(game.world, s, s.targetTrackId) : null;
+      if (tr && tr.pos) brg = Geo.bearing(s.pos, tr.pos);
+      var r = N.Floatplane.launch(game.world, s, brg);
+      if (r.ok) n++;
+      else if (why === null) why = r.reason;
+    });
+    if (n) game.hud.toast('水侦已弹射 · 搜索方位按目标方向');
+    else if (why) game.hud.toast(why, 'warn');
   };
 
   /* ---------------------------------------------------------------- 时间 */

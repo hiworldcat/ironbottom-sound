@@ -244,6 +244,12 @@
       var mPerLon = 111320 * Math.cos(refLat * DEG);
       return { x: (lon - refLon) * mPerLon, y: (lat - refLat) * mPerLat };
     },
+    /** 本地平面米 -> 经纬度（上面那个的逆运算，写战报坐标用） */
+    xyToLonLat: function (x, y, refLon, refLat) {
+      var mPerLat = 111320;
+      var mPerLon = 111320 * Math.cos(refLat * DEG);
+      return { lon: x / mPerLon + refLon, lat: y / mPerLat + refLat };
+    },
     /** 射线与多边形边界的交点检测（用于判断航路上是否有陆地） */
     segIntersectsPolygon: function (a, b, poly) {
       for (var i = 0; i < poly.length; i++) {

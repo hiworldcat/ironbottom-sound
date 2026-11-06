@@ -340,6 +340,7 @@
     location: '所罗门群岛 · 萨沃岛以东海域',
     available: true,
     tags: ['炮战', '昼间', '主力对决'],
+    floatplane: true,
 
     env: {
       visibility: 22000,
@@ -562,6 +563,7 @@
     location: '图拉吉岛 · 佛罗里达群岛',
     available: true,
     tags: ['登陆', '拂晓'],
+    floatplane: true,
 
     env: {
       visibility: 12000,
@@ -1322,6 +1324,7 @@
     location: '瓜达尔卡纳尔岛北岸 · 伦加角',
     available: true,
     tags: ['登陆', '拂晓', '护航'],
+    floatplane: true,
 
     env: {
       visibility: 11000,
@@ -1981,6 +1984,7 @@
     location: '科隆班加拉岛以北 · 库拉湾北口',
     available: true,
     tags: ['夜战', '鱼雷战', '雷达'],
+    floatplane: true,
 
     env: {
       visibility: 5200,
@@ -2382,6 +2386,7 @@
     location: '布干维尔岛西岸 · 奥古斯塔皇后湾',
     available: true,
     tags: ['夜战', '主力对决', '巡洋舰'],
+    floatplane: true,
 
     env: {
       visibility: 6000,
@@ -2498,6 +2503,7 @@
     location: '布卡岛以北 · 圣乔治角外海',
     available: true,
     tags: ['夜战', '追击', '驱逐舰'],
+    floatplane: true,
 
     env: {
       visibility: 5500,
