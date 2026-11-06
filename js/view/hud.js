@@ -40,6 +40,11 @@
       detailBody: $('detailBody'),
       dName: $('dName'),
       dClass: $('dClass'),
+      shipPhoto: $('shipPhoto'), shipPhotoImg: $('shipPhotoImg'),
+      shipPhotoName: $('shipPhotoName'), shipPhotoTag: $('shipPhotoTag'),
+      photoView: $('photoView'), photoViewImg: $('photoViewImg'),
+      photoViewTitle: $('photoViewTitle'), photoViewSub: $('photoViewSub'),
+      photoViewLink: $('photoViewLink'), photoViewClose: $('photoViewClose'),
       barSysHull: $('barSysHull'), txtSysHull: $('txtSysHull'),
       barUpper: $('barUpper'), txtUpper: $('txtUpper'),
       barPowerSys: $('barPowerSys'), txtPowerSys: $('txtPowerSys'),
@@ -102,6 +107,7 @@
       this.el.btnStarshell.addEventListener('click', function () { g.fireStarshell(); });
     }
     $('dClose').addEventListener('click', function () { g.clearSelection(); });
+    this.bindPhoto();
 
     /* 回放控制条 */
     this.el.rbPlay.addEventListener('click', function () { g.replayToggle(); });
@@ -817,6 +823,70 @@
   };
 
   /* ---------------------------------------------------------------- 详情 */
+  /* --------------------------------------------------------------- 舰艇照片 */
+  /** 详情面板顶部的历史照片；点开看大图 */
+  HUD.prototype.renderShipPhoto = function (ship) {
+    var el = this.el;
+    if (!el.shipPhoto) return;
+    var ph = N.SHIP_PHOTOS && N.SHIP_PHOTOS[ship.name];
+    if (!ph) {
+      el.shipPhoto.classList.add('missing');
+      this._photo = null;
+      return;
+    }
+    el.shipPhoto.classList.remove('missing');
+    var src = 'assets/ships/' + ph.file;
+    if (el.shipPhotoImg.getAttribute('src') !== src) {
+      el.shipPhotoImg.setAttribute('src', src);
+    }
+    el.shipPhotoImg.setAttribute('alt', ship.name + ' 历史照片');
+    el.shipPhotoName.textContent = ship.name + (ship.hullNumber ? ' ' + ship.hullNumber : '');
+    el.shipPhotoTag.textContent = ph.same ? '同型舰' : '';
+    this._photo = ph;
+  };
+
+  HUD.prototype.openPhoto = function () {
+    var el = this.el, ph = this._photo;
+    if (!el.photoView || !ph) return;
+    var big = ph.lg ? 'assets/ships/lg/' + ph.file : 'assets/ships/' + ph.file;
+    el.photoViewImg.setAttribute('src', big);
+    el.photoViewImg.onerror = function () {
+      el.photoViewImg.onerror = null;
+      el.photoViewImg.setAttribute('src', 'assets/ships/' + ph.file);
+    };
+    el.photoViewTitle.textContent = ph.title || '';
+    el.photoViewSub.textContent = ph.same ? '本舰无存世照片，这里用同型舰代表舰的历史照片' : '战时／服役期间历史照片';
+    if (ph.page) {
+      el.photoViewLink.href = ph.page;
+      el.photoViewLink.style.display = '';
+    } else {
+      el.photoViewLink.style.display = 'none';
+    }
+    el.photoView.classList.remove('hidden');
+  };
+
+  HUD.prototype.closePhoto = function () {
+    if (this.el.photoView) this.el.photoView.classList.add('hidden');
+  };
+
+  HUD.prototype.bindPhoto = function () {
+    var self = this;
+    if (this.el.shipPhoto) {
+      this.el.shipPhoto.addEventListener('click', function () { self.openPhoto(); });
+    }
+    if (this.el.photoViewClose) {
+      this.el.photoViewClose.addEventListener('click', function () { self.closePhoto(); });
+    }
+    if (this.el.photoView) {
+      this.el.photoView.addEventListener('click', function (e) {
+        if (e.target === self.el.photoView) self.closePhoto();
+      });
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') self.closePhoto();
+    });
+  };
+
   HUD.prototype.renderDetail = function (world) {
     var g = this.game;
     var sel = g.selected;
@@ -848,6 +918,8 @@
       ' · ' + ship.cls.displacement.toLocaleString() + ' t' +
       (sel.size > 1 ? '  （已选 ' + sel.size + ' 艘）' : '') +
       (stale ? '  · 报告 ' + Math.round(age) + 's 前' : '');
+
+    this.renderShipPhoto(ship);
 
     var hullNow = vw && vw.hull != null ? vw.hull : ship.hull;
     var floodNow = vw && vw.flood != null ? vw.flood : ship.flood;
@@ -1630,6 +1702,12 @@
       '<div class="obj-item"><span class="ob-mark">☀</span><span>所以照明弹是<b>双刃剑</b>：照亮敌人也照亮自己。夜战里谁先开照明弹，往往意味着谁先准备开炮。</span></div>' +
       '<div class="obj-item"><span class="ob-mark">☀</span><span>每艘舰携带有限（重巡 10 / 轻巡 8 / 驱逐舰 5），发射后需 <b>25 秒</b>装填；运输船没有。</span></div>' +
       '<div class="obj-item"><span class="ob-mark">☀</span><span>被照亮的敌舰会更容易被识别（舰种→舰级→舰名），也更容易被跨射校射。</span></div>' +
+      '</div>' +
+      '<p style="margin-top:18px"><b style="color:var(--accent)">海图与舰艇照片</b></p>' +
+      '<div class="obj-list">' +
+      '<div class="obj-item"><span class="ob-mark">◆</span><span>海图是按<b>真实海岸线</b>画的（Natural Earth 1:10m 陆地数据，1 格约 90 米），所罗门群岛的岛形、海峡宽度和岛间距离都是真的，不是手绘示意图。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">◆</span><span>选中己方任意一艘舰（海图上点，或左栏名册点），详情面板顶部就会出现它<b>历史上的真实照片</b>，点照片看大图，大图下面给出维基百科条目链接。敌舰只显示航迹，不给照片 —— 那等于白送舰名。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">◆</span><span>照片是<b>本地存的</b>，断网也能看；少数没留下照片的舰（如高波、照月）用<b>同型舰</b>代表舰的照片，角上标「同型舰」。</span></div>' +
       '</div>' +
       '<p style="margin-top:18px"><b style="color:var(--accent)">操作</b></p>' +
       '<div class="obj-list">' +

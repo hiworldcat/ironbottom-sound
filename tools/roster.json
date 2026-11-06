@@ -1,0 +1,746 @@
+[
+ {
+  "name": "旧金山",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "波特兰",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "海伦娜",
+  "side": "US",
+  "cls": "brooklyn",
+  "hull": 92
+ },
+ {
+  "name": "弗莱彻",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "奥班农",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "尼古拉斯",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "妙高",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "羽黑",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "长良",
+  "side": "JP",
+  "cls": "sendai",
+  "hull": 78
+ },
+ {
+  "name": "敷波",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "时雨",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "麦考利",
+  "side": "US",
+  "cls": "transport",
+  "hull": 92
+ },
+ {
+  "name": "巴尼特",
+  "side": "US",
+  "cls": "transport",
+  "hull": 92
+ },
+ {
+  "name": "亚特兰大",
+  "side": "US",
+  "cls": "atlanta",
+  "hull": 78
+ },
+ {
+  "name": "朱诺",
+  "side": "US",
+  "cls": "atlanta",
+  "hull": 78
+ },
+ {
+  "name": "库欣",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "拉菲",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "斯特雷特",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "比叡",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "雾岛",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "晓",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "雷",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "夕立",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "春雨",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "圣路易斯",
+  "side": "US",
+  "cls": "brooklyn",
+  "hull": 92
+ },
+ {
+  "name": "芝加哥",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "帕特森",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "巴格利",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "鸟海",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "青叶",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "古鹰",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "夕凪",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "岚",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "雪风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "浜风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "明尼阿波利斯",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 49.5
+ },
+ {
+  "name": "盐湖城",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "博伊西",
+  "side": "US",
+  "cls": "brooklyn",
+  "hull": 92
+ },
+ {
+  "name": "法伦霍尔特",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "邓肯",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "布坎南",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "衣笠",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "吹雪",
+  "side": "JP",
+  "cls": "fubuki",
+  "hull": 54
+ },
+ {
+  "name": "初雪",
+  "side": "JP",
+  "cls": "fubuki",
+  "hull": 54
+ },
+ {
+  "name": "堪培拉",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "阿斯托里亚",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "昆西",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "文森斯",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "布鲁",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "加古",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "天龙",
+  "side": "JP",
+  "cls": "sendai",
+  "hull": 78
+ },
+ {
+  "name": "夕张",
+  "side": "JP",
+  "cls": "sendai",
+  "hull": 78
+ },
+ {
+  "name": "利伯蒂",
+  "side": "US",
+  "cls": "transport",
+  "hull": 92
+ },
+ {
+  "name": "檀香山",
+  "side": "US",
+  "cls": "brooklyn",
+  "hull": 92
+ },
+ {
+  "name": "雷德福",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "詹金斯",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "新月",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "长月",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "皋月",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "天雾",
+  "side": "JP",
+  "cls": "fubuki",
+  "hull": 54
+ },
+ {
+  "name": "新奥尔良",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "彭萨科拉",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "北安普顿",
+  "side": "US",
+  "cls": "neworleans",
+  "hull": 110
+ },
+ {
+  "name": "珀金斯",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "莫里",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "杜拉尼",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "高波",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "长波",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "亲潮",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "黑潮",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "江风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "凉风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "泰勒",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "金刚",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "榛名",
+  "side": "JP",
+  "cls": "myoko",
+  "hull": 108
+ },
+ {
+  "name": "照月",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "村雨",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "五月雨",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "塞尔弗里奇",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "谢瓦利埃",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "自走炮登陆舰",
+  "side": "US",
+  "cls": "transport",
+  "hull": 92
+ },
+ {
+  "name": "夕云",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "矶风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "利安得",
+  "side": "US",
+  "cls": "brooklyn",
+  "hull": 92
+ },
+ {
+  "name": "拉尔夫·塔尔博特",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "格温",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "神通",
+  "side": "JP",
+  "cls": "sendai",
+  "hull": 78
+ },
+ {
+  "name": "清波",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "克利夫兰",
+  "side": "US",
+  "cls": "cleveland",
+  "hull": 100
+ },
+ {
+  "name": "蒙彼利埃",
+  "side": "US",
+  "cls": "cleveland",
+  "hull": 100
+ },
+ {
+  "name": "丹佛",
+  "side": "US",
+  "cls": "cleveland",
+  "hull": 100
+ },
+ {
+  "name": "康威",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "沃勒",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "普林格尔",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "峰云",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "邓拉普",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "克雷文",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "朗",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "斯塔克",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "萩风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "川风",
+  "side": "JP",
+  "cls": "shiratsuyu",
+  "hull": 50
+ },
+ {
+  "name": "切瓦利尔",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "滨风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "狭雾",
+  "side": "JP",
+  "cls": "fubuki",
+  "hull": 54
+ },
+ {
+  "name": "大发 1",
+  "side": "JP",
+  "cls": "barge",
+  "hull": 9
+ },
+ {
+  "name": "大发 2",
+  "side": "JP",
+  "cls": "barge",
+  "hull": 9
+ },
+ {
+  "name": "大发 3",
+  "side": "JP",
+  "cls": "barge",
+  "hull": 9
+ },
+ {
+  "name": "哥伦比亚",
+  "side": "US",
+  "cls": "cleveland",
+  "hull": 100
+ },
+ {
+  "name": "查尔斯·奥斯本",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "克拉克斯顿",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "戴森",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "斯彭斯",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "撒切尔",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "康弗斯",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "富特",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "斯坦利",
+  "side": "US",
+  "cls": "fletcher",
+  "hull": 58
+ },
+ {
+  "name": "川内",
+  "side": "JP",
+  "cls": "sendai",
+  "hull": 78
+ },
+ {
+  "name": "阿贺野",
+  "side": "JP",
+  "cls": "sendai",
+  "hull": 78
+ },
+ {
+  "name": "初风",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "若月",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "大波",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "卷波",
+  "side": "JP",
+  "cls": "kagero",
+  "hull": 56
+ },
+ {
+  "name": "夕雾",
+  "side": "JP",
+  "cls": "fubuki",
+  "hull": 54
+ },
+ {
+  "name": "卯月",
+  "side": "JP",
+  "cls": "fubuki",
+  "hull": 54
+ }
+]

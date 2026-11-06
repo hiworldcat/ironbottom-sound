@@ -1,0 +1,597 @@
+{
+ "旧金山": {
+  "file": "uss-san-francisco-ca-38.jpg",
+  "title": "USS San Francisco (CA-38)",
+  "page": "https://en.wikipedia.org/wiki/USS_San_Francisco_(CA-38)"
+ },
+ "波特兰": {
+  "file": "uss-portland-ca-33.jpg",
+  "title": "USS Portland (CA-33)",
+  "page": "https://en.wikipedia.org/wiki/USS_Portland_(CA-33)"
+ },
+ "海伦娜": {
+  "file": "uss-helena-cl-50.jpg",
+  "title": "USS Helena (CL-50)",
+  "page": "https://en.wikipedia.org/wiki/USS_Helena_(CL-50)"
+ },
+ "弗莱彻": {
+  "file": "uss-fletcher-dd-445.jpg",
+  "title": "USS Fletcher (DD-445)",
+  "page": "https://en.wikipedia.org/wiki/USS_Fletcher_(DD-445)"
+ },
+ "奥班农": {
+  "file": "uss-o-bannon-dd-450.jpg",
+  "title": "USS O'Bannon (DD-450)",
+  "page": "https://en.wikipedia.org/wiki/USS_O'Bannon_(DD-450)"
+ },
+ "尼古拉斯": {
+  "file": "uss-nicholas-dd-449.jpg",
+  "title": "USS Nicholas (DD-449)",
+  "page": "https://en.wikipedia.org/wiki/USS_Nicholas_(DD-449)"
+ },
+ "妙高": {
+  "file": "japanese-cruiser-my-k.jpg",
+  "title": "Japanese cruiser Myōkō",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_My%C5%8Dk%C5%8D"
+ },
+ "羽黑": {
+  "file": "japanese-cruiser-haguro.jpg",
+  "title": "Japanese cruiser Haguro",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Haguro"
+ },
+ "长良": {
+  "file": "japanese-cruiser-nagara.jpg",
+  "title": "Japanese cruiser Nagara",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Nagara"
+ },
+ "敷波": {
+  "file": "japanese-destroyer-shikinami-1929.jpg",
+  "title": "Japanese destroyer Shikinami (1929)",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Shikinami_(1929)"
+ },
+ "时雨": {
+  "file": "japanese-destroyer-shigure-1935.jpg",
+  "title": "Japanese destroyer Shigure (1935)",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Shigure_(1935)"
+ },
+ "麦考利": {
+  "file": "uss-mccawley-apa-4.jpg",
+  "title": "USS McCawley (APA-4)",
+  "page": "https://en.wikipedia.org/wiki/USS_McCawley_(APA-4)"
+ },
+ "巴尼特": {
+  "file": "uss-barnett-apa-5.jpg",
+  "title": "USS Barnett",
+  "page": "https://en.wikipedia.org/wiki/USS_Barnett"
+ },
+ "亚特兰大": {
+  "file": "uss-atlanta-cl-51.jpg",
+  "title": "USS Atlanta (CL-51)",
+  "page": "https://en.wikipedia.org/wiki/USS_Atlanta_(CL-51)"
+ },
+ "朱诺": {
+  "file": "uss-juneau-cl-52.jpg",
+  "title": "USS Juneau (CL-52)",
+  "page": "https://en.wikipedia.org/wiki/USS_Juneau_(CL-52)"
+ },
+ "库欣": {
+  "file": "uss-cushing-dd-376.jpg",
+  "title": "USS Cushing (DD-376)",
+  "page": "https://en.wikipedia.org/wiki/USS_Cushing_(DD-376)"
+ },
+ "拉菲": {
+  "file": "uss-laffey-dd-459.jpg",
+  "title": "USS Laffey (DD-459)",
+  "page": "https://en.wikipedia.org/wiki/USS_Laffey_(DD-459)"
+ },
+ "斯特雷特": {
+  "file": "uss-sterett-dd-407.jpg",
+  "title": "USS Sterett (DD-407)",
+  "page": "https://en.wikipedia.org/wiki/USS_Sterett_(DD-407)"
+ },
+ "比叡": {
+  "file": "japanese-battleship-hiei.jpg",
+  "title": "Japanese battleship Hiei",
+  "page": "https://en.wikipedia.org/wiki/Japanese_battleship_Hiei"
+ },
+ "雾岛": {
+  "file": "japanese-battleship-kirishima.jpg",
+  "title": "Japanese battleship Kirishima",
+  "page": "https://en.wikipedia.org/wiki/Japanese_battleship_Kirishima"
+ },
+ "晓": {
+  "file": "japanese-destroyer-akatsuki-1932.jpg",
+  "title": "Japanese destroyer Akatsuki (1932)",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Akatsuki_(1932)"
+ },
+ "圣路易斯": {
+  "file": "uss-st-louis-cl-49.jpg",
+  "title": "USS St. Louis (CL-49)",
+  "page": "https://en.wikipedia.org/wiki/USS_St._Louis_(CL-49)"
+ },
+ "芝加哥": {
+  "file": "uss-chicago-ca-29.jpg",
+  "title": "USS Chicago (CA-29)",
+  "page": "https://en.wikipedia.org/wiki/USS_Chicago_(CA-29)"
+ },
+ "帕特森": {
+  "file": "uss-patterson-dd-392.jpg",
+  "title": "USS Patterson (DD-392)",
+  "page": "https://en.wikipedia.org/wiki/USS_Patterson_(DD-392)"
+ },
+ "巴格利": {
+  "file": "uss-bagley-dd-386.jpg",
+  "title": "USS Bagley (DD-386)",
+  "page": "https://en.wikipedia.org/wiki/USS_Bagley_(DD-386)"
+ },
+ "鸟海": {
+  "file": "japanese-cruiser-ch-kai.jpg",
+  "title": "Japanese cruiser Chōkai",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Ch%C5%8Dkai"
+ },
+ "青叶": {
+  "file": "japanese-cruiser-aoba.jpg",
+  "title": "Japanese cruiser Aoba",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Aoba"
+ },
+ "古鹰": {
+  "file": "japanese-cruiser-furutaka.jpg",
+  "title": "Japanese cruiser Furutaka",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Furutaka"
+ },
+ "岚": {
+  "file": "japanese-destroyer-arashi.jpg",
+  "title": "Japanese destroyer Arashi",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Arashi"
+ },
+ "明尼阿波利斯": {
+  "file": "uss-minneapolis-ca-36.jpg",
+  "title": "USS Minneapolis (CA-36)",
+  "page": "https://en.wikipedia.org/wiki/USS_Minneapolis_(CA-36)"
+ },
+ "盐湖城": {
+  "file": "uss-salt-lake-city-ca-25.jpg",
+  "title": "USS Salt Lake City (CA-25)",
+  "page": "https://en.wikipedia.org/wiki/USS_Salt_Lake_City_(CA-25)"
+ },
+ "博伊西": {
+  "file": "uss-boise-cl-47.jpg",
+  "title": "USS Boise (CL-47)",
+  "page": "https://en.wikipedia.org/wiki/USS_Boise_(CL-47)"
+ },
+ "法伦霍尔特": {
+  "file": "uss-farenholt-dd-491.jpg",
+  "title": "USS Farenholt (DD-491)",
+  "page": "https://en.wikipedia.org/wiki/USS_Farenholt_(DD-491)"
+ },
+ "邓肯": {
+  "file": "uss-duncan-dd-485.jpg",
+  "title": "USS Duncan (DD-485)",
+  "page": "https://en.wikipedia.org/wiki/USS_Duncan_(DD-485)"
+ },
+ "布坎南": {
+  "file": "uss-buchanan-dd-484.jpg",
+  "title": "USS Buchanan (DD-484)",
+  "page": "https://en.wikipedia.org/wiki/USS_Buchanan_(DD-484)"
+ },
+ "衣笠": {
+  "file": "japanese-cruiser-kinugasa.jpg",
+  "title": "Japanese cruiser Kinugasa",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Kinugasa"
+ },
+ "吹雪": {
+  "file": "japanese-destroyer-fubuki-1927.jpg",
+  "title": "Japanese destroyer Fubuki (1927)",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Fubuki_(1927)"
+ },
+ "堪培拉": {
+  "file": "hmas-canberra-d33.jpg",
+  "title": "HMAS Canberra (D33)",
+  "page": "https://en.wikipedia.org/wiki/HMAS_Canberra_(D33)"
+ },
+ "阿斯托里亚": {
+  "file": "uss-astoria-ca-34.jpg",
+  "title": "USS Astoria (CA-34)",
+  "page": "https://en.wikipedia.org/wiki/USS_Astoria_(CA-34)"
+ },
+ "昆西": {
+  "file": "uss-quincy-ca-39.jpg",
+  "title": "USS Quincy (CA-39)",
+  "page": "https://en.wikipedia.org/wiki/USS_Quincy_(CA-39)"
+ },
+ "文森斯": {
+  "file": "uss-vincennes-ca-44.jpg",
+  "title": "USS Vincennes (CA-44)",
+  "page": "https://en.wikipedia.org/wiki/USS_Vincennes_(CA-44)"
+ },
+ "布鲁": {
+  "file": "uss-blue-dd-387.jpg",
+  "title": "USS Blue (DD-387)",
+  "page": "https://en.wikipedia.org/wiki/USS_Blue_(DD-387)"
+ },
+ "加古": {
+  "file": "japanese-cruiser-kako.jpg",
+  "title": "Japanese cruiser Kako",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Kako"
+ },
+ "天龙": {
+  "file": "japanese-cruiser-tenry.jpg",
+  "title": "Japanese cruiser Tenryū",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Tenry%C5%AB"
+ },
+ "夕张": {
+  "file": "japanese-cruiser-y-bari.jpg",
+  "title": "Japanese cruiser Yūbari",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Y%C5%ABbari"
+ },
+ "利伯蒂": {
+  "file": "uss-mccawley-apa-4.jpg",
+  "title": "USS McCawley (APA-4)",
+  "page": "https://en.wikipedia.org/wiki/USS_McCawley_(APA-4)"
+ },
+ "檀香山": {
+  "file": "uss-honolulu-cl-48.jpg",
+  "title": "USS Honolulu (CL-48)",
+  "page": "https://en.wikipedia.org/wiki/USS_Honolulu_(CL-48)"
+ },
+ "雷德福": {
+  "file": "uss-radford-dd-446.jpg",
+  "title": "USS Radford (DD-446)",
+  "page": "https://en.wikipedia.org/wiki/USS_Radford_(DD-446)"
+ },
+ "詹金斯": {
+  "file": "uss-jenkins-dd-447.jpg",
+  "title": "USS Jenkins (DD-447)",
+  "page": "https://en.wikipedia.org/wiki/USS_Jenkins_(DD-447)"
+ },
+ "新月": {
+  "file": "japanese-destroyer-niizuki.jpg",
+  "title": "Japanese destroyer Niizuki",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Niizuki"
+ },
+ "长月": {
+  "file": "japanese-destroyer-nagatsuki-1926.jpg",
+  "title": "Japanese destroyer Nagatsuki (1926)",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Nagatsuki_(1926)"
+ },
+ "新奥尔良": {
+  "file": "uss-new-orleans-ca-32.jpg",
+  "title": "USS New Orleans (CA-32)",
+  "page": "https://en.wikipedia.org/wiki/USS_New_Orleans_(CA-32)"
+ },
+ "彭萨科拉": {
+  "file": "uss-pensacola-ca-24.jpg",
+  "title": "USS Pensacola (CA-24)",
+  "page": "https://en.wikipedia.org/wiki/USS_Pensacola_(CA-24)"
+ },
+ "北安普顿": {
+  "file": "uss-northampton-ca-26.jpg",
+  "title": "USS Northampton (CA-26)",
+  "page": "https://en.wikipedia.org/wiki/USS_Northampton_(CA-26)"
+ },
+ "珀金斯": {
+  "file": "uss-perkins-dd-377.jpg",
+  "title": "USS Perkins (DD-377)",
+  "page": "https://en.wikipedia.org/wiki/USS_Perkins_(DD-377)"
+ },
+ "莫里": {
+  "file": "uss-maury-dd-401.jpg",
+  "title": "USS Maury (DD-401)",
+  "page": "https://en.wikipedia.org/wiki/USS_Maury_(DD-401)"
+ },
+ "杜拉尼": {
+  "file": "uss-drayton-dd-366.jpg",
+  "title": "USS Drayton (DD-366)",
+  "page": "https://en.wikipedia.org/wiki/USS_Drayton_(DD-366)"
+ },
+ "长波": {
+  "file": "japanese-destroyer-naganami.jpg",
+  "title": "Japanese destroyer Naganami",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Naganami"
+ },
+ "亲潮": {
+  "file": "japanese-destroyer-oyashio.jpg",
+  "title": "Japanese destroyer Oyashio",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Oyashio"
+ },
+ "黑潮": {
+  "file": "japanese-destroyer-kuroshio.jpg",
+  "title": "Japanese destroyer Kuroshio",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Kuroshio"
+ },
+ "凉风": {
+  "file": "japanese-destroyer-suzukaze.jpg",
+  "title": "Japanese destroyer Suzukaze",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Suzukaze"
+ },
+ "泰勒": {
+  "file": "uss-taylor-dd-468.jpg",
+  "title": "USS Taylor (DD-468)",
+  "page": "https://en.wikipedia.org/wiki/USS_Taylor_(DD-468)"
+ },
+ "金刚": {
+  "file": "japanese-battleship-kong.jpg",
+  "title": "Japanese battleship Kongō",
+  "page": "https://en.wikipedia.org/wiki/Japanese_battleship_Kong%C5%8D"
+ },
+ "榛名": {
+  "file": "japanese-battleship-haruna.jpg",
+  "title": "Japanese battleship Haruna",
+  "page": "https://en.wikipedia.org/wiki/Japanese_battleship_Haruna"
+ },
+ "村雨": {
+  "file": "japanese-destroyer-murasame-1935.jpg",
+  "title": "Japanese destroyer Murasame (1935)",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Murasame_(1935)"
+ },
+ "塞尔弗里奇": {
+  "file": "uss-selfridge-dd-357.jpg",
+  "title": "USS Selfridge (DD-357)",
+  "page": "https://en.wikipedia.org/wiki/USS_Selfridge_(DD-357)"
+ },
+ "谢瓦利埃": {
+  "file": "uss-chevalier-dd-451.jpg",
+  "title": "USS Chevalier (DD-451)",
+  "page": "https://en.wikipedia.org/wiki/USS_Chevalier_(DD-451)"
+ },
+ "自走炮登陆舰": {
+  "file": "landing-craft-support.jpg",
+  "title": "Landing craft support",
+  "page": "https://en.wikipedia.org/wiki/Landing_craft_support"
+ },
+ "利安得": {
+  "file": "hmnzs-leander.jpg",
+  "title": "HMNZS Leander",
+  "page": "https://en.wikipedia.org/wiki/HMNZS_Leander"
+ },
+ "拉尔夫·塔尔博特": {
+  "file": "uss-ralph-talbot-dd-390.jpg",
+  "title": "USS Ralph Talbot",
+  "page": "https://en.wikipedia.org/wiki/USS_Ralph_Talbot"
+ },
+ "格温": {
+  "file": "uss-gwin-dd-433.jpg",
+  "title": "USS Gwin (DD-433)",
+  "page": "https://en.wikipedia.org/wiki/USS_Gwin_(DD-433)"
+ },
+ "神通": {
+  "file": "japanese-cruiser-jints.jpg",
+  "title": "Japanese cruiser Jintsū",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Jints%C5%AB"
+ },
+ "清波": {
+  "file": "japanese-destroyer-kiyonami.jpg",
+  "title": "Japanese destroyer Kiyonami",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Kiyonami"
+ },
+ "克利夫兰": {
+  "file": "uss-cleveland-cl-55.jpg",
+  "title": "USS Cleveland (CL-55)",
+  "page": "https://en.wikipedia.org/wiki/USS_Cleveland_(CL-55)"
+ },
+ "蒙彼利埃": {
+  "file": "uss-montpelier-cl-57.jpg",
+  "title": "USS Montpelier (CL-57)",
+  "page": "https://en.wikipedia.org/wiki/USS_Montpelier_(CL-57)"
+ },
+ "丹佛": {
+  "file": "uss-denver-cl-58.jpg",
+  "title": "USS Denver (CL-58)",
+  "page": "https://en.wikipedia.org/wiki/USS_Denver_(CL-58)"
+ },
+ "康威": {
+  "file": "uss-conway-dd-507.jpg",
+  "title": "USS Conway (DD-507)",
+  "page": "https://en.wikipedia.org/wiki/USS_Conway_(DD-507)"
+ },
+ "沃勒": {
+  "file": "uss-waller-dd-466.jpg",
+  "title": "USS Waller",
+  "page": "https://en.wikipedia.org/wiki/USS_Waller"
+ },
+ "普林格尔": {
+  "file": "uss-pringle-dd-477.jpg",
+  "title": "USS Pringle",
+  "page": "https://en.wikipedia.org/wiki/USS_Pringle"
+ },
+ "邓拉普": {
+  "file": "uss-dunlap-dd-384.jpg",
+  "title": "USS Dunlap",
+  "page": "https://en.wikipedia.org/wiki/USS_Dunlap"
+ },
+ "克雷文": {
+  "file": "uss-craven-dd-382.jpg",
+  "title": "USS Craven (DD-382)",
+  "page": "https://en.wikipedia.org/wiki/USS_Craven_(DD-382)"
+ },
+ "朗": {
+  "file": "uss-lang-dd-399.jpg",
+  "title": "USS Lang (DD-399)",
+  "page": "https://en.wikipedia.org/wiki/USS_Lang_(DD-399)"
+ },
+ "斯塔克": {
+  "file": "uss-stack-dd-406.jpg",
+  "title": "USS Stack",
+  "page": "https://en.wikipedia.org/wiki/USS_Stack"
+ },
+ "萩风": {
+  "file": "japanese-destroyer-hagikaze.jpg",
+  "title": "Japanese destroyer Hagikaze",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Hagikaze"
+ },
+ "切瓦利尔": {
+  "file": "uss-chevalier-dd-451.jpg",
+  "title": "USS Chevalier (DD-451)",
+  "page": "https://en.wikipedia.org/wiki/USS_Chevalier_(DD-451)"
+ },
+ "狭雾": {
+  "file": "japanese-destroyer-sagiri.jpg",
+  "title": "Japanese destroyer Sagiri",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Sagiri"
+ },
+ "大发 1": {
+  "file": "daihatsu-class-landing-craft.jpg",
+  "title": "Daihatsu-class landing craft",
+  "page": "https://en.wikipedia.org/wiki/Daihatsu-class_landing_craft"
+ },
+ "大发 2": {
+  "file": "daihatsu-class-landing-craft.jpg",
+  "title": "Daihatsu-class landing craft",
+  "page": "https://en.wikipedia.org/wiki/Daihatsu-class_landing_craft"
+ },
+ "大发 3": {
+  "file": "daihatsu-class-landing-craft.jpg",
+  "title": "Daihatsu-class landing craft",
+  "page": "https://en.wikipedia.org/wiki/Daihatsu-class_landing_craft"
+ },
+ "哥伦比亚": {
+  "file": "uss-columbia-cl-56.jpg",
+  "title": "USS Columbia (CL-56)",
+  "page": "https://en.wikipedia.org/wiki/USS_Columbia_(CL-56)"
+ },
+ "查尔斯·奥斯本": {
+  "file": "uss-charles-ausburne-dd-570.jpg",
+  "title": "USS Charles Ausburne (DD-570)",
+  "page": "https://en.wikipedia.org/wiki/USS_Charles_Ausburne_(DD-570)"
+ },
+ "克拉克斯顿": {
+  "file": "uss-claxton-dd-571.jpg",
+  "title": "USS Claxton (DD-571)",
+  "page": "https://en.wikipedia.org/wiki/USS_Claxton_(DD-571)"
+ },
+ "戴森": {
+  "file": "uss-dyson-dd-572.jpg",
+  "title": "USS Dyson",
+  "page": "https://en.wikipedia.org/wiki/USS_Dyson"
+ },
+ "斯彭斯": {
+  "file": "uss-spence-dd-512.jpg",
+  "title": "USS Spence",
+  "page": "https://en.wikipedia.org/wiki/USS_Spence"
+ },
+ "撒切尔": {
+  "file": "uss-thatcher-dd-514.jpg",
+  "title": "USS Thatcher (DD-514)",
+  "page": "https://en.wikipedia.org/wiki/USS_Thatcher_(DD-514)"
+ },
+ "康弗斯": {
+  "file": "uss-converse-dd-509.jpg",
+  "title": "USS Converse (DD-509)",
+  "page": "https://en.wikipedia.org/wiki/USS_Converse_(DD-509)"
+ },
+ "富特": {
+  "file": "uss-foote-dd-511.jpg",
+  "title": "USS Foote (DD-511)",
+  "page": "https://en.wikipedia.org/wiki/USS_Foote_(DD-511)"
+ },
+ "斯坦利": {
+  "file": "uss-stanly-dd-478.jpg",
+  "title": "USS Stanly",
+  "page": "https://en.wikipedia.org/wiki/USS_Stanly"
+ },
+ "川内": {
+  "file": "japanese-cruiser-sendai.jpg",
+  "title": "Japanese cruiser Sendai",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Sendai"
+ },
+ "阿贺野": {
+  "file": "japanese-cruiser-agano.jpg",
+  "title": "Japanese cruiser Agano",
+  "page": "https://en.wikipedia.org/wiki/Japanese_cruiser_Agano"
+ },
+ "初风": {
+  "file": "japanese-destroyer-hatsukaze.jpg",
+  "title": "Japanese destroyer Hatsukaze",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Hatsukaze"
+ },
+ "若月": {
+  "file": "japanese-destroyer-wakatsuki.jpg",
+  "title": "Japanese destroyer Wakatsuki",
+  "page": "https://en.wikipedia.org/wiki/Japanese_destroyer_Wakatsuki"
+ },
+ "夕凪": {
+  "file": "ja-2.jpg",
+  "title": "夕凪 (2代神風型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%A4%95%E5%87%AA_(2%E4%BB%A3%E7%A5%9E%E9%A2%A8%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "雷": {
+  "file": "jp-01.jpg",
+  "title": "雷 (吹雪型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E9%9B%B7_(%E5%90%B9%E9%9B%AA%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "夕立": {
+  "file": "jp-02.jpg",
+  "title": "夕立 (白露型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%A4%95%E7%AB%8B_(%E7%99%BD%E9%9C%B2%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "春雨": {
+  "file": "jp-03.jpg",
+  "title": "春雨 (白露型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E6%98%A5%E9%9B%A8_(%E7%99%BD%E9%9C%B2%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "初雪": {
+  "file": "jp-04.jpg",
+  "title": "初雪 (吹雪型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%88%9D%E9%9B%AA_(%E5%90%B9%E9%9B%AA%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "皋月": {
+  "file": "jp-05.jpg",
+  "title": "皐月 (睦月型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E7%9A%90%E6%9C%88_(%E7%9D%A6%E6%9C%88%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "夕雾": {
+  "file": "jp-06.jpg",
+  "title": "夕霧 (吹雪型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%A4%95%E9%9C%A7_(%E5%90%B9%E9%9B%AA%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "雪风": {
+  "file": "jp-07.jpg",
+  "title": "雪風 (駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E9%9B%AA%E9%A2%A8_(%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "浜风": {
+  "file": "jp-08.jpg",
+  "title": "浜風 (陽炎型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E6%B5%9C%E9%A2%A8_(%E9%99%BD%E7%82%8E%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "滨风": {
+  "file": "jp-09.jpg",
+  "title": "浜風 (陽炎型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E6%B5%9C%E9%A2%A8_(%E9%99%BD%E7%82%8E%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "天雾": {
+  "file": "jp-10.jpg",
+  "title": "天霧 (駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%A4%A9%E9%9C%A7_(%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "五月雨": {
+  "file": "jp-11.jpg",
+  "title": "五月雨 (駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E4%BA%94%E6%9C%88%E9%9B%A8_(%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "矶风": {
+  "file": "jp-12.jpg",
+  "title": "磯風 (陽炎型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E7%A3%AF%E9%A2%A8_(%E9%99%BD%E7%82%8E%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "峰云": {
+  "file": "jp-13.jpg",
+  "title": "峯雲 (駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%B3%AF%E9%9B%B2_(%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "卷波": {
+  "file": "jp-14.jpg",
+  "title": "巻波 (駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%B7%BB%E6%B3%A2_(%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "卯月": {
+  "file": "jp-15.jpg",
+  "title": "卯月 (睦月型駆逐艦)",
+  "page": "https://ja.wikipedia.org/wiki/%E5%8D%AF%E6%9C%88_(%E7%9D%A6%E6%9C%88%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6)"
+ },
+ "夕云": {
+  "file": "jp-16.jpg",
+  "title": "夕雲型駆逐艦",
+  "page": "https://ja.wikipedia.org/wiki/%E5%A4%95%E9%9B%B2%E5%9E%8B%E9%A7%86%E9%80%90%E8%89%A6"
+ }
+}

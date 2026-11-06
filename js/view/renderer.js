@@ -294,22 +294,15 @@
       ctx.fillStyle = g;
       ctx.fill();
 
-      // 岛内等高线：把轮廓按比例向中心收缩，画几圈淡淡的线，做出地形感
+      // 岛内等高线：把海岸线往内偏移着画几圈，用描边 + 裁剪实现，
+      // 比把轮廓按比例缩向重心靠谱得多（真实海岸线是不规则形状）
       ctx.save();
       ctx.clip();
-      var rings = [0.78, 0.56, 0.36, 0.2];
+      var rings = [0.9, 0.75, 0.58, 0.4, 0.24];
       for (var k = 0; k < rings.length; k++) {
-        var sc = rings[k];
-        ctx.beginPath();
-        for (var j = 0; j < poly.length; j++) {
-          var px = bb.cx + (poly[j].x - bb.cx) * sc;
-          var py = bb.cy + (poly[j].y - bb.cy) * sc;
-          var sp = cam.w2s({ x: px, y: py }, W, H);
-          if (j === 0) ctx.moveTo(sp.x, sp.y); else ctx.lineTo(sp.x, sp.y);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = 'rgba(140,190,120,' + (0.055 + 0.02 * k) + ')';
-        ctx.lineWidth = 1;
+        pathIsland(ctx, poly, cam, W, H);
+        ctx.strokeStyle = 'rgba(140,190,120,' + (0.05 + 0.018 * k) + ')';
+        ctx.lineWidth = Math.max(1, (bb.x1 - bb.x0) * cam.zoom * 0.035 * (k + 1));
         ctx.stroke();
       }
       // 山脊高光
@@ -338,8 +331,10 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (i = 0; i < isl.length; i++) {
+      if (!isl[i].label) continue;              // 无名小岛只画轮廓
       bb = islandBB(isl[i]);
-      var s = cam.w2s({ x: bb.cx, y: bb.cy }, W, H);
+      var anchor = isl[i].labelPos || { x: bb.cx, y: bb.cy };
+      var s = cam.w2s(anchor, W, H);
       if (s.x < -80 || s.x > W + 80 || s.y < -30 || s.y > H + 30) continue;
       var span = Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0) * cam.zoom;
       if (span < 26) continue;

@@ -484,6 +484,74 @@ kbd {
 .d-close { cursor: pointer; color: var(--dim); font-size: 18px; line-height: 1; padding: 0 4px; }
 .d-close:hover { color: var(--red); }
 
+/* ---------------- 舰艇历史照片 ---------------- */
+.ship-photo {
+  position: relative;
+  margin: 12px 14px 2px;
+  border: 1px solid rgba(92, 152, 182, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #061018;
+  cursor: zoom-in;
+  line-height: 0;
+}
+.ship-photo img {
+  width: 100%;
+  height: 128px;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.78) contrast(1.04);
+  transition: transform 0.35s ease, filter 0.25s ease;
+}
+.ship-photo:hover img { transform: scale(1.05); filter: saturate(1) contrast(1.06); }
+.ship-photo::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(4, 12, 18, 0.92) 0%, rgba(4, 12, 18, 0.15) 42%, transparent 70%);
+  pointer-events: none;
+}
+.ship-photo-cap {
+  position: absolute; left: 8px; right: 8px; bottom: 6px;
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 10.5px; line-height: 1.3; color: #d6ecf7;
+  text-shadow: 0 1px 3px #000;
+  z-index: 1;
+}
+.ship-photo-cap em {
+  font-style: normal; font-size: 9px; color: #ffd479;
+  border: 1px solid rgba(255, 212, 121, 0.45);
+  border-radius: 2px; padding: 0 3px;
+}
+.ship-photo.missing { display: none; }
+
+.photo-view {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(2, 8, 12, 0.88);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 4vh 4vw;
+}
+.photo-view.hidden { display: none; }
+.photo-frame { position: relative; max-width: 92vw; max-height: 92vh; }
+.photo-frame img {
+  display: block; max-width: 92vw; max-height: 78vh;
+  border: 1px solid rgba(120, 190, 220, 0.35);
+  border-radius: 3px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+}
+.photo-view-foot {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin-top: 10px; font-size: 12px; color: var(--dim);
+}
+.photo-view-title { font-size: 14px; color: #eafaff; font-weight: 600; }
+.photo-view-link { color: #7fd4f0; text-decoration: none; border-bottom: 1px dotted rgba(127, 212, 240, 0.5); }
+.photo-view-link:hover { color: #b6e9ff; }
+.photo-view-close {
+  position: absolute; top: -34px; right: -6px;
+  font-size: 26px; line-height: 1; color: #9fc4d6; cursor: pointer;
+}
+.photo-view-close:hover { color: #ff6b6b; }
+
 .d-section { padding: 12px 14px; border-bottom: 1px solid rgba(92, 152, 182, 0.12); }
 .d-label {
   font-size: 10px; letter-spacing: 0.14em; color: var(--dim2);

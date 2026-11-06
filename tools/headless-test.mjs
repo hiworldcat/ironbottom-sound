@@ -9,6 +9,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const files = [
   'js/core.js',
   'js/data/ships.js',
+  'js/data/coastline.js',
   'js/data/scenarios.js',
   'js/sim/weather.js', 'js/sim/damage.js', 'js/sim/sensors.js',
   'js/sim/ship.js',

@@ -175,6 +175,14 @@
       <div class="d-close" id="dClose">×</div>
     </div>
 
+    <div class="ship-photo" id="shipPhoto" title="点击看大图">
+      <img id="shipPhotoImg" alt="">
+      <div class="ship-photo-cap">
+        <span id="shipPhotoName">—</span>
+        <em id="shipPhotoTag"></em>
+      </div>
+    </div>
+
     <div class="d-section">
       <div class="d-label">进水与火灾</div>
       <div class="bar-row"><span>进水</span><div class="bar flood"><i id="barFlood"></i></div><b id="txtFlood">0</b></div>
@@ -285,6 +293,19 @@
 <!-- ============================ 提示条 ============================ -->
 <div id="toast" class="toast hidden"></div>
 
+<!-- ============================ 舰艇照片大图 ============================ -->
+<div id="photoView" class="photo-view hidden">
+  <div class="photo-frame">
+    <img id="photoViewImg" alt="">
+    <div class="photo-view-foot">
+      <div class="photo-view-title" id="photoViewTitle">—</div>
+      <div class="photo-view-sub" id="photoViewSub">—</div>
+      <a class="photo-view-link" id="photoViewLink" target="_blank" rel="noopener">原始条目 ↗</a>
+    </div>
+    <div class="photo-view-close" id="photoViewClose">×</div>
+  </div>
+</div>
+
 <!-- ============================ 遮罩 ============================ -->
 <div id="overlay" class="overlay hidden">
   <div class="modal" id="modal">
@@ -299,6 +320,8 @@
 <!-- ============================ 脚本 ============================ -->
 <script src="js/core.js"></script>
 <script src="js/data/ships.js"></script>
+<script src="js/data/coastline.js"></script>
+<script src="js/data/ship-photos.js"></script>
 <script src="js/data/scenarios.js"></script>
 <script src="js/data/campaign.js"></script>
 <script src="js/sim/weather.js"></script>
