@@ -53,8 +53,8 @@
 | 设备与损管：一台主机被毁、舵机 ×3、雷达和识别器故障 | 游戏内帮助新增「设备与损管」 |
 | ![电探](screenshots/shot-esm.png) | ![融合与延迟](screenshots/shot-fusion.png) |
 | 金刚的电探听到美军雷达：紫色方位线，±5.1 km 的“仅方位”接触 | 融合与延迟：同一张图上 ±600 m（实时）到 ±1.4 km（207 秒前） |
-| ![近失弹](screenshots/shot-nearmiss.png) | ![结构分区](screenshots/shot-zones.png) |
-| 近失弹：落在舷侧不远的水柱也会撕开船壳 | 舰体结构分区 |
+| ![近失弹](screenshots/shot-nearmiss.png) | ![线上版电探](screenshots/shot-live-esm.png) |
+| 近失弹：落在舷侧不远的水柱也会撕开船壳 | 线上版：金刚的电探抓到美军雷达 |
 
 ---
 

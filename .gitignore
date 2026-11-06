@@ -19,3 +19,4 @@ tools/px*.py
 
 # Natural Earth 原始数据（11 MB，用时自己下，见 tools/ne-final.mjs 注释）
 tools/nedata/*.geojson
+tools/shots.json
