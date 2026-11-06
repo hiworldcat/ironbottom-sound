@@ -14,7 +14,7 @@ const files = [
   'js/sim/weather.js', 'js/sim/damage.js', 'js/sim/sensors.js',
   'js/sim/ship.js',
   'js/sim/combat.js',
-  'js/sim/ai.js',
+  'js/sim/tactics.js', 'js/sim/ai.js',
   'js/sim/squad.js', 'js/sim/command.js',
   'js/sim/recorder.js',
   'js/sim/world.js'

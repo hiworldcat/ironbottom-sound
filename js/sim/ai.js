@@ -74,6 +74,13 @@
        它会一直打到识别纠正为止 —— 这就是误伤。 */
     if (ship.ffTrack && world.time < (ship.ffUntil || 0)) return ship.ffTrack;
 
+    /* 参谋部已经给这条舰分了目标：就按它打，别自己另挑一个 */
+    if (ship.aiTask && ship.aiTask.targetId) {
+      var t0 = N.Sensors.trackFor(world, ship, ship.aiTask.targetId);
+      if (t0 && t0.pos && !t0.phantom && !t0.esmOnly &&
+        world.time - t0.lastSeen < 300) return t0;
+    }
+
     var tracks = N.Sensors.trackList(world, ship.side);
     var best = null, bestScore = -1;
     for (var i = 0; i < tracks.length; i++) {
@@ -225,28 +232,167 @@
   }
 
   /**
-   * 夜间照明：有目标航迹但看不清时打照明弹。
-   * 只在低光环境、目标距离 4.5~11 km 时使用，避免浪费。
+   * 夜间照明：交给舰队参谋部统一管（`N.Tactics.illuminate`）。
+   * 这里只留一个兜底：万一 tactics.js 没加载，就还按老规矩打。
    */
   function considerStarshell(world, ship) {
+    if (N.Tactics) return;
     if (!ship.starshells || ship.starshellCd > 0) return;
     if (!world.env || world.env.light === 'day') return;
-    // 能见度已经够好，照明弹没有意义
-    if (world.env.visibility >= 9000) return;
+    var vis = (world.weather && world.weather.visibility) ||
+      (world.env.visibility != null ? world.env.visibility : 12000);
+    if (vis >= 9000) return;
     var tr = nearestEnemyTrack(world, ship, 11500);
     if (!tr) return;
     var d = V.dist(ship.pos, tr.pos);
-    if (d < 4500) return;                       // 太近，直接打就行
-    // 已经被照亮了就不重复打
+    if (d < 4500) return;
     if (world.illuminationAt(tr.pos) > 0) return;
     var lead = Geo.lead(tr.pos, tr.course, tr.speed, 3.5);
     world.fireStarshell(ship, lead);
   }
 
+  /* ==========================================================================
+   *  任务执行：掩护 / 雷击 / 前出搜索
+   *  参谋部（tactics.js）只负责"派活"，具体怎么开船还是在这里。
+   * ========================================================================== */
+
+  /** 掩护船队：守在被护航舰周围，敌人逼近船队才迎上去 */
+  function doScreen(world, ship, ai, track, doc) {
+    var ward = wardOf(world, ship);
+    if (!ward) return false;
+
+    var wardThreat = track ? V.dist(ward.pos, track.pos) : 1e9;
+
+    /* 敌人已经摸到船队跟前：拦在它和船队之间，这时候不守阵位了 */
+    if (track && wardThreat < 13000) {
+      var myRange = V.dist(ship.pos, track.pos);
+      ship.engage = myRange < ship.gunRangeMax * 0.98;
+      // 拦在敌人和船队连线上、靠敌人那一侧
+      var between = Geo.dest(ward.pos, Geo.bearing(ward.pos, track.pos), 3000);
+      var want = Geo.bearing(ship.pos, between);
+      ship.orderedHeading = avoidLand(world, ship, avoidShips(world, ship, want), track.pos);
+      ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.92;
+      return true;
+    }
+
+    ship.engage = !!track && V.dist(ship.pos, track.pos) < ship.gunRangeMax * 0.95;
+    var station = escortStation(ship, ward);
+    if (V.dist(ship.pos, station) > 900) {
+      ship.orderedHeading = avoidLand(world, ship, Geo.bearing(ship.pos, station), station);
+      ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.8;
+    } else {
+      ship.orderedHeading = avoidLand(world, ship, ward.heading, ward.pos);
+      ship.orderedSpeed = Math.min(ship.effectiveMaxSpeed() * 0.7, ward.speed + 5);
+    }
+    return true;
+  }
+
+  /** 同一支舰队不要对着同一条船反复放雷 */
+  function torpedoWindowOpen(world, ship, track) {
+    if (!world._torpClaims) world._torpClaims = {};
+    var k = ship.side + ':' + track.id;
+    return world.time >= (world._torpClaims[k] || 0);
+  }
+
+  function claimTorpedoWindow(world, ship, track) {
+    if (!world._torpClaims) world._torpClaims = {};
+    world._torpClaims[ship.side + ':' + track.id] = world.time + 45;
+  }
+
+  /** 雷击：高速抢占发射阵位 → 齐射 → 转向脱离 */
+  function doTorpedo(world, ship, ai, track, doc, rng) {
+    var range = V.dist(ship.pos, track.pos);
+    var brg = Geo.bearing(ship.pos, track.pos);
+    ai.lastRange = range;
+
+    // 雷击航路上顺手也开炮
+    ship.engage = range < ship.gunRangeMax * 0.98;
+
+    if (ai.torpCooldown <= world.time && !ship.ffTrack && torpedoWindowOpen(world, ship, track)) {
+      var trng = ship.torpRangeMax * doc.torpFrac;
+      var rel = Math.abs(U.angDiff(brg, ship.heading));
+      if (range < trng && rel > 40 && rel < 140) {
+        // 距离越远，扇面越宽 —— 远了目标跑得出散布
+        var spread = U.clamp(1.3 + range / 5200, 1.3, 4.4);
+        for (var ti = 0; ti < ship.torps.length; ti++) {
+          var mount = ship.torps[ti];
+          if (mount.disabled || mount.destroyed || mount.fault || mount.loaded <= 0) continue;
+          var n = Math.min(mount.loaded, 4);
+          var fired = N.Combat.launchTorpedoes(world, ship, mount, track.pos,
+            track.course, track.speed, n, spread);
+          if (fired > 0) {
+            ai.torpCooldown = world.time + rng.range(150, 220);
+            ai.turnAwayUntil = world.time + 70;
+            claimTorpedoWindow(world, ship, track);
+            if (ship.aiTask) ship.aiTask.note = '雷击 ' + track.id + ' · 已齐射';
+            world.log(ship.side, ship.name + ' 发射鱼雷！', 'info');
+            break;
+          }
+        }
+      }
+    }
+
+    if (world.time < ai.turnAwayUntil) {
+      // 放完雷立刻把舰尾转过去，别让敌人拿舷侧打你
+      ship.orderedHeading = avoidLand(world, ship, U.norm360(brg + 115), track.pos);
+      ship.orderedSpeed = ship.effectiveMaxSpeed();
+      return;
+    }
+
+    var fireR = ship.torpRangeMax * doc.torpFrac;
+    if (range > fireR * 1.05) {
+      // 还没到射程：全速拦截
+      var want = Geo.interceptBearing(ship.pos, track.pos, track.course,
+        track.speed * U.KNOT_MS, ship.effectiveMaxSpeed() * U.KNOT_MS);
+      ship.orderedHeading = avoidLand(world, ship, avoidShips(world, ship, want), track.pos);
+      ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.98;
+    } else {
+      // 进入射程：把舷侧摆过去，等管里装满
+      var rel2 = U.angDiff(brg, ship.heading);
+      var want2 = U.norm360(brg + (rel2 >= 0 ? 80 : -80));
+      ship.orderedHeading = avoidLand(world, ship, avoidShips(world, ship, want2), track.pos);
+      ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.78;
+    }
+  }
+
+  /** 前出搜索：全速奔可疑海域，到了以后扇形扫 */
+  function doScout(world, ship, ai, doc) {
+    ship.engage = false;
+    var toward = (world.searchPos && world.searchPos[ship.side === 'US' ? 'JP' : 'US'])
+      || world.homePos[ship.side === 'US' ? 'JP' : 'US'];
+    // 有无线电测向方位就顺着它找 —— 比闷头开往搜索海域聪明。
+    // 侦察舰比主力压得更近（2400 m），这样才真的"前出"而不是跟着队伍走。
+    var app = N.Tactics && N.Tactics.approachPoint
+      ? N.Tactics.approachPoint(world, ship.side, ship.pos, 2400) : null;
+    if (app) toward = app;
+    // 两条侦察舰左右分开，拉成一条搜索线 —— 一起走等于只有一双眼睛。
+    // 偏的是"航向"而不是"目标点"：目标点常在几十公里外，横向挪几公里
+    // 只差两度，等于没挪。
+    if (ai.scoutSide === undefined) ai.scoutSide = ship._scoutSide || (rng0(world) ? 1 : -1);
+    var d = V.dist(ship.pos, toward);
+    if (d > 6500) {
+      var want = U.norm360(Geo.bearing(ship.pos, toward) + 26 * ai.scoutSide);
+      ship.orderedHeading = avoidLand(world, ship, want, toward);
+      ship.orderedSpeed = ship.effectiveMaxSpeed();
+      return;
+    }
+    // 到位了：左右摆着扫，雷达和瞭望一起用
+    if (!ai.scoutTurn || world.time > ai.scoutTurn) {
+      ai.scoutTurn = world.time + 120;
+      ai.scoutHdg = U.norm360((ai.scoutHdg || ship.heading) + (rng0(world) ? 70 : -70));
+    }
+    ship.orderedHeading = avoidLand(world, ship, ai.scoutHdg || ship.heading, toward);
+    ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.6;
+  }
+
+  function rng0(world) { return world.rng.chance(0.5); }
+
   function updateShip(world, ship) {
     var ai = ensureAI(ship, world);
     var doc = DOCTRINE[ship.side] || DOCTRINE.US;
     var rng = world.rng;
+    var T = (N.Tactics && N.Tactics.ROLE) || {};
+    var role = (ship.aiTask && ship.aiTask.role) || null;
 
     /* ---------- 运输船：只负责开到目的地 ---------- */
     if (ship.cls.type === 'AK' || ship.role === 'transport') {
@@ -344,6 +490,7 @@
 
     /* ---------- 撤退判定 ---------- */
     var badlyHurt = (ship.flood > 55) || (ship.hull < ship.hullMax * 0.30);
+    if (role === T.WITHDRAW) badlyHurt = true;
     if (badlyHurt && ai.state !== 'RETREAT') {
       ai.state = 'RETREAT';
       world.log(ship.side, ship.name + ' 失去战斗力，正在脱离', ship.side === world.playerSide ? 'warn' : 'good');
@@ -376,12 +523,27 @@
     }
 
     var track = ship.targetTrackId ? N.Sensors.trackFor(world, ship, ship.targetTrackId) : null;
-    if (!track || world.time - track.lastSeen > 240) {
+
+    /* ---------- 任务：掩护船队 ----------
+       掩护舰不追敌人：守在船队旁边，敌人摸到 13 km 以内才迎上去。 */
+    if (role === T.SCREEN && doScreen(world, ship, ai, track, doc)) return;
+
+    if (!track || world.time - track.lastSeen > 300) {
       // 无目标：前往敌可能出现的海域搜索
       ship.engage = false;
       if (ai.state !== 'PATROL') { ai.state = 'PATROL'; }
+
+      /* ---------- 任务：前出搜索 ----------
+         参谋部派的侦察舰直奔可疑海域，不和船队挤在一起。 */
+      if (role === T.SCOUT) { doScout(world, ship, ai, doc); return; }
+
       var toward = (world.searchPos && world.searchPos[ship.side === 'US' ? 'JP' : 'US'])
         || world.homePos[ship.side === 'US' ? 'JP' : 'US'];
+      // 只有无线电测向方位时：整队顺着那个方位压上去，
+      // 接近到能打照明弹、能看见的距离，而不是闷头开往预设海域
+      var bapp = N.Tactics && N.Tactics.approachPoint
+        ? N.Tactics.approachPoint(world, ship.side, ship.pos, 5200) : null;
+      if (bapp) toward = bapp;
 
       // 护航舰不要丢下被护航对象跑去搜索海域——跟着船队走
       var ward = (ship.role === 'transport' || ship.role === 'escortee') ? null : wardOf(world, ship);
@@ -422,6 +584,14 @@
     var brg = Geo.bearing(ship.pos, track.pos);
     ai.lastRange = range;
 
+    /* ---------- 任务：雷击 ----------
+       参谋部点名的雷击舰走一条专门的航路：先高速抢位，再摆舷侧齐射，
+       放完立刻转向脱离 —— 而不是像炮战舰那样横着慢慢磨。 */
+    if (role === T.TORPEDO && ship.torpRangeMax > 0 && !ship.ffTrack) {
+      doTorpedo(world, ship, ai, track, doc, rng);
+      return;
+    }
+
     /* ---------- 交战 ---------- */
     var gunRange = ship.gunRangeMax;
     var inRange = range < gunRange * 0.98;
@@ -430,18 +600,21 @@
     /* ---------- 鱼雷 ---------- */
     /* 鱼雷不放：发射前要"确认目标"，这是各国海军的硬规定，也是本作里
        识别器认错时唯一的刹车 —— 炮可能误击，鱼雷不会。 */
-    if (ai.torpCooldown <= world.time && ship.torpRangeMax > 0 && !ship.ffTrack) {
+    if (ai.torpCooldown <= world.time && ship.torpRangeMax > 0 && !ship.ffTrack &&
+      torpedoWindowOpen(world, ship, track)) {
       var trng = ship.torpRangeMax * doc.torpFrac;
       var rel = Math.abs(U.angDiff(brg, ship.heading));
       if (range < trng && rel > 35 && rel < 145) {
+        var spread = U.clamp(1.3 + range / 5200, 1.3, 4.4);
         for (var ti = 0; ti < ship.torps.length; ti++) {
           var mount = ship.torps[ti];
           if (mount.disabled || mount.destroyed || mount.fault || mount.loaded <= 0) continue;
           var n = Math.min(mount.loaded, 4);
-          var fired = N.Combat.launchTorpedoes(world, ship, mount, track.pos, track.course, track.speed, n, doc.torpSpread);
+          var fired = N.Combat.launchTorpedoes(world, ship, mount, track.pos, track.course, track.speed, n, spread);
           if (fired > 0) {
             ai.torpCooldown = world.time + rng.range(180, 260);
             ai.turnAwayUntil = world.time + 75;
+            claimTorpedoWindow(world, ship, track);
             world.log(ship.side === world.playerSide ? 'US' : 'JP',
               ship.name + ' 发射鱼雷！', 'info');
             break;
@@ -502,11 +675,19 @@
      * @param {boolean} controlMovement 是否接管运动（敌方=true，友方=false 时只做目标分配）
      */
     update: function (world, dt, side, controlMovement) {
+      /* 先让参谋部分工、安排照明弹（它自己会按间隔限流） */
+      if (N.Tactics) {
+        N.Tactics.plan(world, side);
+        N.Tactics.illuminate(world, side);
+      }
+
+      /* 玩家自己那一侧：除非开了自动指挥，否则不许 AI 抢舵 */
+      var playerSide = (side === world.playerSide) && !world.autopilot;
       var ships = world.ships;
       for (var i = 0; i < ships.length; i++) {
         var s = ships[i];
         if (s.side !== side || s.sunk || !s.alive) continue;
-        if (s.isPlayerControlled && !controlMovement) {
+        if (s.isPlayerControlled && (!controlMovement || playerSide)) {
           // 玩家控制的舰只：只自动分配目标，不动航向
           var ai = ensureAI(s, world);
           if (world.time > ai.next) {

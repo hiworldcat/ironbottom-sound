@@ -16,7 +16,7 @@ const root = process.cwd();
 const files = [
   'js/core.js', 'js/data/ships.js', 'js/data/coastline.js', 'js/data/scenarios.js',
   'js/sim/weather.js', 'js/sim/damage.js', 'js/sim/sensors.js', 'js/sim/ship.js', 'js/sim/combat.js',
-  'js/sim/ai.js', 'js/sim/squad.js', 'js/sim/command.js', 'js/sim/recorder.js', 'js/sim/world.js'
+  'js/sim/tactics.js', 'js/sim/ai.js', 'js/sim/squad.js', 'js/sim/command.js', 'js/sim/recorder.js', 'js/sim/world.js'
 ];
 globalThis.Naval = {};
 for (const f of files) {

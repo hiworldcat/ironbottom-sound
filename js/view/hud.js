@@ -945,9 +945,12 @@
     var stale = !!vw && age > 18 && !vw.sunk;
 
     this.el.dName.textContent = ship.name + (ship.hullNumber ? '  ' + ship.hullNumber : '');
+    // AI 在替玩家指挥这条舰时，把它的任务写出来 —— 不指挥就不知道它在干什么
+    var aiTask = (N.Tactics && ship.isPlayerControlled === false) ? N.Tactics.label(ship) : null;
     this.el.dClass.textContent = ship.cls.name + ' · ' + ship.cls.typeName +
       ' · ' + ship.cls.displacement.toLocaleString() + ' t' +
       (sel.size > 1 ? '  （已选 ' + sel.size + ' 艘）' : '') +
+      (aiTask ? '  · 任务：' + aiTask : '') +
       (stale ? '  · 报告 ' + Math.round(age) + 's 前' : '');
 
     this.renderShipPhoto(ship);

@@ -1349,6 +1349,16 @@
           return { n: t.name, s: proj(t.pos), hp: Math.round(t.hp) };
         }),
         illum: (world.illum || []).map(function (i) { return proj(i.pos); }),
+        // 舰队参谋部的分工（敌方也有，方便调试和录像时看 AI 在干什么）
+        ai: (function () {
+          var out = {};
+          ['US', 'JP'].forEach(function (sd) {
+            out[sd] = ((world.aiTasks || {})[sd] || []).map(function (t) {
+              return t.ship + ':' + t.role + (t.target ? '>' + t.target : '');
+            });
+          });
+          return out;
+        })(),
         squads: (world.squads || []).map(function (sq) {
           return {
             n: sq.name, s: proj(sq.anchor),

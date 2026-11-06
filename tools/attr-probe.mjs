@@ -1,6 +1,6 @@
 ﻿import fs from "node:fs"; import path from "node:path"; import vm from "node:vm";
 const root=process.cwd();
-const files=["js/core.js","js/data/ships.js","js/data/scenarios.js","js/sim/sensors.js","js/sim/ship.js","js/sim/combat.js","js/sim/ai.js","js/sim/recorder.js","js/sim/world.js"];
+const files=["js/core.js","js/data/ships.js","js/data/scenarios.js","js/sim/sensors.js","js/sim/ship.js","js/sim/combat.js","js/sim/tactics.js", "js/sim/ai.js","js/sim/recorder.js","js/sim/world.js"];
 globalThis.Naval={}; for(const f of files) vm.runInThisContext(fs.readFileSync(path.join(root,f),"utf8"),{filename:f});
 const N=globalThis.Naval;
 for (const sc of N.Scenarios.available()) {

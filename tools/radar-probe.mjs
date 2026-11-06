@@ -18,7 +18,7 @@ import vm from "node:vm";
 const FILES = [
   'js/core.js', 'js/data/ships.js', 'js/data/coastline.js', 'js/data/scenarios.js',
   'js/data/campaign.js', 'js/sim/weather.js', 'js/sim/damage.js', 'js/sim/sensors.js',
-  'js/sim/ship.js', 'js/sim/combat.js', 'js/sim/ai.js', 'js/sim/squad.js',
+  'js/sim/ship.js', 'js/sim/combat.js', 'js/sim/tactics.js', 'js/sim/ai.js', 'js/sim/squad.js',
   'js/sim/command.js', 'js/sim/floatplane.js', 'js/sim/recorder.js', 'js/sim/world.js'
 ];
 const ctx = {
