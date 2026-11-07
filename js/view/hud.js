@@ -1861,6 +1861,17 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span>会突然来<b>阵雨</b>和<b>雨飑</b>，能见度可能几分钟内掉一半再恢复；战报里会写</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>起火</b>的舰自己就是一根烟囱：烟顺风飘，挡在观察者和目标之间时瞭望会打折；不过夜里火光也最好认</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>鼠标停在顶栏气象条上，能看到当前雷达和无线电被削了多少</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>友舰和敌舰都在自己打仗</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>你不管的舰由 AI 驾驶：<b>运输船、受创撤退舰</b>从来如此；其余舰只要你不下命令，舰长也会自己打。选中一条舰，详情面板舰级那一行会写它当前的<b>任务</b>（「任务：掩护船队」这种）</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>AI 的六个任务：<b>掩护船队</b>（守在 2.4 km 内，敌人摸到 13 km 才迎上去）、<b>前出搜索</b>（两条舰左右分开 26° 拉成搜索线）、<b>向敌接近</b>、<b>炮战</b>、<b>雷击</b>、<b>脱离战斗</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>日军压进去</b>：5~11 km，光学指挥仪在这个距离上不吃亏，而且进了九三式鱼雷的扇面。一组驱逐舰会<b>分道同时齐射</b>，十几条鱼雷一起到</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>美军拉开打</b>：有雷达的一方在夜里会主动保持 <b>11.5 km 以上</b>单方面输出 —— 这个距离也在九三式鱼雷射程之外。一旦被照明弹照亮，这个便宜就没了，距离会自动让出来</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>AI 也<b>只读航迹</b>：它会被假回波和一坨回波骗，会因为报告迟到而判断失误，和你的处境一样</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>战力与胜负</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span><b>战力不是血条</b>：战力 = 基础战力 × 船体完整度 × 还能跑出的航速 × (1−火势/160) × 还能响的炮管比例。一条船体 60%、动力全毁、只剩一座炮塔的重巡，战力可能比一条完好的驱逐舰还低</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>一方<b>战力 ≤ 40%</b> 就判负（写「被迫脱离」）；一方全灭直接结束；有时限的场景到点比战力，差 10% 以内算平</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>左栏「任务目标」里 <b>◆ 主要目标</b>决定胜负，<b>◇ 次要目标</b>只记在战报和结算里</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>打完按 <b>R</b> 看回放：双方真实舰位、真实机动、真实沉没过程。这是唯一能看到"当时到底发生了什么"的地方</span></div>' +
       '<div class="obj-head" style="margin-top:12px"><span>设备与损管</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>详情面板的「结构分区」按<b>三大系统</b>显示：<b>船体结构</b>（打光就沉）、<b>上层结构</b>（武器 + 通讯 + 其他）、<b>动力系统</b>（发动机 + 舵机 + 电力）</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>子条各算各的：打武器区、打通讯区，上层结构那一行跟着掉；掉一台主机、打坏舵机、电力故障，动力系统那一行跟着掉</span></div>' +

@@ -261,6 +261,8 @@ console.log('\n[5] 同一个目标不会全队挤上去');
         if (s.side !== 'JP' || s.sunk) continue;
         const t = s.aiTask && s.aiTask.targetId;
         if (!t) continue;
+        // 雷击组是故意压在同一坨目标上的（鱼雷要的就是扇面），这里只看炮战分配
+        if (s.aiTask.role === N.Tactics.ROLE.TORPEDO) continue;
         byTgt[t] = (byTgt[t] || 0) + 1;
         n++;
       }
@@ -282,6 +284,73 @@ console.log('\n[5] 同一个目标不会全队挤上去');
   ok(multiSamples > 0, `其中 ${multiSamples} 个时刻有三个以上目标可选`);
   ok(piled / Math.max(1, multiSamples) < 0.25,
     `有几个目标可选时，兵力分配失衡的采样只占 ${Math.round(100 * piled / Math.max(1, multiSamples))}%（应 < 25%，最多一次 ${worst} 条打一个目标）`);
+}
+
+/* ------------------------------------------------------- 5b. 协同雷击 */
+console.log('\n[5b] 雷击是"一组人一起放"，不是各打各的');
+{
+  let samples = 0, sameTgt = 0, lanes = 0, maxGroup = 0;
+  play('kolombangara', { autopilot: true }, 900, {
+    each(world, f) {
+      if (f % 20) return;
+      const g = world.ships.filter(s => s.side === 'JP' && !s.sunk &&
+        s.aiTask && s.aiTask.role === N.Tactics.ROLE.TORPEDO);
+      if (g.length < 2) return;
+      samples++;
+      maxGroup = Math.max(maxGroup, g.length);
+      const ids = new Set(g.map(s => s.aiTask.targetId));
+      if (ids.size === 1) sameTgt++;
+      const ln = new Set(g.map(s => Math.round((s.aiTask.lane || 0) * 100)));
+      if (ln.size === g.length) lanes++;
+    }
+  });
+  ok(samples > 0, `采到 ${samples} 个"两条以上驱逐舰同时雷击"的时刻（最多 ${maxGroup} 条）`);
+  ok(sameTgt / Math.max(1, samples) > 0.6,
+    `同组打同一个目标簇的占 ${Math.round(100 * sameTgt / Math.max(1, samples))}%（应 > 60%）`);
+  ok(lanes / Math.max(1, samples) > 0.6,
+    `组内每条舰分到不同的"扇面道"的占 ${Math.round(100 * lanes / Math.max(1, samples))}%（应 > 60%）`);
+}
+
+/* ------------------------------------------------------- 5c. 美军的雷达距离控制 */
+console.log('\n[5c] 有雷达的一方不往鱼雷射程里钻');
+{
+  // 夜里、能见度差：美军有雷达，日军没有。美军应该把距离拉开打。
+  const ranges = [];
+  play('tassafaronga', { autopilot: true }, 1500, {
+    each(world, f) {
+      if (f % 50) return;
+      if ((world.weather.visibility || 12000) >= 9000) return;
+      for (const s of world.ships) {
+        if (s.side !== 'US' || s.sunk) continue;
+        if (!s.cls.radar) continue;
+        const t = s.targetTrackId ? N.Sensors.trackFor(world, s, s.targetTrackId) : null;
+        if (!t || world.time - t.lastSeen > 30) continue;
+        const d = N.V.dist(s.pos, t.pos);
+        if (d < 26000) ranges.push(d);
+      }
+    }
+  });
+  ranges.sort((a, b) => a - b);
+  const med = ranges.length ? ranges[Math.floor(ranges.length / 2)] : 0;
+  ok(ranges.length > 50, `采到 ${ranges.length} 个"美舰有雷达接触"的时刻`);
+  ok(med > 9000, `夜战里美舰的交战距离中位数 ${Math.round(med)} m（应 > 9000，别钻进九三式鱼雷的扇面）`);
+}
+
+/* ------------------------------------------------------- 5d. 伤舰有人护送 */
+console.log('\n[5d] 被打残的舰不是自己一个人往回开');
+{
+  const w = new N.World(N.Scenarios.get('night_escort'), { seed: 777, autopilot: true });
+  const hurt = w.ships.filter(s => s.side === 'US' && s.cls.type === 'DD')[0]
+    || w.ships.filter(s => s.side === 'US')[0];
+  hurt.hull = hurt.hullMax * 0.2;
+  hurt.flood = 60;
+  let escorted = 0;
+  for (let i = 0; i < 1200; i++) {
+    w.update(0.1);
+    if (i % 50) continue;
+    if (w.ships.some(s => s.aiTask && s.aiTask.wardId === hurt.id && s !== hurt)) escorted++;
+  }
+  ok(escorted > 0, `伤舰 ${hurt.name} 有 ${escorted} 个时刻带着一条护航舰`);
 }
 
 /* ------------------------------------------------------- 6. 不抢玩家的舵 */

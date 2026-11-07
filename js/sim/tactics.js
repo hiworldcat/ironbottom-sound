@@ -50,7 +50,8 @@
       illumGap: 75,        // 两次照明之间至少隔多久
       illumMax: 10000,     // 超过这个距离照了也白照（弹只飞 6.5 km）
       illumVisCap: 9000,   // 自己已经能看这么远就不打了
-      illumMin: 3200       // 这么近就不用照了
+      illumMin: 3200,      // 这么近就不用照了
+      salvoDelay: 5        // 雷击组从下令到齐射隔多久
     },
     JP: {
       planEvery: 6,
@@ -62,7 +63,8 @@
       illumGap: 42,
       illumMax: 11000,
       illumVisCap: 11000,
-      illumMin: 3000
+      illumMin: 3000,
+      salvoDelay: 16
     }
   };
 
@@ -181,6 +183,7 @@
     t.targetId = tid;
     t.since = world.time;
     t.note = note || '';
+    if (role !== ROLE.SCREEN) t.wardId = null;
     return true;
   }
 
@@ -206,6 +209,10 @@
           sc *= (g === 'CA' ? 1.5 : g === 'CL' ? 1.3 : g === 'DD' ? 0.9 : 1);
         }
       }
+
+      // 跑到 10 节以下的船：多半是刚挨了鱼雷或者机舱被打穿了。
+      // 补刀比另开一个战场划算 —— 它已经打不动，但还占着敌人的一条舰。
+      if (tr.typeGuess !== 'AK' && tr.speed != null && tr.speed < 10) sc *= 1.3;
 
       // 已经有人打了：第一条不扣分，第二条开始让位。
       // 这里直接数"现在谁在打它"，比记账可靠 —— 换任务被任期挡住时也不会算错。
@@ -274,10 +281,31 @@
       }
     }
 
+    /* ---- 2b. 有人被打残了：派一条舰陪它回去 ----
+       单独一条伤舰往回开，最容易在半路上被落单的驱逐舰补掉。 */
+    var wounded = [];
+    for (var wi = 0; wi < ships.length; wi++) {
+      var ws2 = ships[wi];
+      if (ws2.aiTask && ws2.aiTask.role === ROLE.WITHDRAW) wounded.push(ws2);
+    }
+    if (wounded.length && pending.length > 1) {
+      var w0 = wounded[0], escort = null, ed = 1e9;
+      for (var ei = 0; ei < pending.length; ei++) {
+        var dd = V.dist(pending[ei].pos, w0.pos);
+        if (dd < ed) { ed = dd; escort = pending[ei]; }
+      }
+      if (escort && ed < 12000) {
+        assign(world, escort, ROLE.SCREEN);
+        escort.aiTask.wardId = w0.id;
+        pending.splice(pending.indexOf(escort), 1);
+      }
+    }
+
     /* ---- 3. 有敌情：分目标、派雷击 ---- */
     var contacts = contactsOf(world, side);
     if (contacts.length) {
-      // 3a. 雷击组
+      /* 3a. 雷击组：几条舰打同一个目标簇，横着铺开，差不多同时放雷。
+         不要各挑各的目标 —— 鱼雷的杀伤在于"一次来十几条，往哪躲都有一条"。 */
       var torpCapable = [];
       for (var t = 0; t < pending.length; t++) {
         var ts = pending[t];
@@ -286,14 +314,31 @@
       torpCapable.sort(function (a, b) {
         return distToContacts(a, contacts) - distToContacts(b, contacts);
       });
+      var group = salvoTarget(world, side, contacts);
       var nTorp = Math.min(st.torpAttackers, torpCapable.length);
-      for (var q = 0; q < nTorp; q++) {
-        var ship = torpCapable[q];
-        if (distToContacts(ship, contacts) > st.torpMinRange) continue;
-        var tt = bestContact(world, ship, contacts, ships);
-        if (!tt) continue;
-        assign(world, ship, ROLE.TORPEDO, tt.id, '雷击 ' + tt.id);
-        pending.splice(pending.indexOf(ship), 1);
+      if (group && nTorp > 0) {
+        var lanes = [];
+        for (var lq = 0; lq < nTorp; lq++) {
+          lanes.push(nTorp === 1 ? 0 : (lq / (nTorp - 1)) * 2 - 1);
+        }
+        /* 齐射时刻只在"换目标"时重设。否则每 6 秒重算一次，
+           readyAt 永远比现在晚十几秒 —— 鱼雷一发也放不出去。 */
+        var prev = m.salvo;
+        m.salvo = {
+          targetId: group.id, n: nTorp, lanes: lanes,
+          readyAt: (prev && prev.targetId === group.id)
+            ? prev.readyAt
+            : world.time + (st.salvoDelay || 0)
+        };
+        for (var q = 0; q < nTorp; q++) {
+          var ship = torpCapable[q];
+          if (V.dist(ship.pos, group.pos) > st.torpMinRange) continue;
+          assign(world, ship, ROLE.TORPEDO, group.id, '雷击 ' + group.id);
+          ship.aiTask.lane = lanes[q];
+          pending.splice(pending.indexOf(ship), 1);
+        }
+      } else {
+        m.salvo = null;
       }
 
       // 3b. 其余炮战
@@ -320,6 +365,14 @@
       }
     }
 
+    /* ---- 4b. 记下目标最后出现的位置：丢了接触以后好往那儿追 ---- */
+    for (var lp = 0; lp < ships.length; lp++) {
+      var lps = ships[lp];
+      if (!lps.aiTask || !lps.aiTask.targetId) continue;
+      var lt = N.Sensors.trackFor(world, lps, lps.aiTask.targetId);
+      if (lt && lt.pos) lps.aiTask.lastPos = { x: lt.pos.x, y: lt.pos.y, t: world.time };
+    }
+
     /* ---- 5. 汇总一份给调试/HUD 看 ---- */
     for (var z = 0; z < ships.length; z++) {
       var zs = ships[z];
@@ -334,6 +387,35 @@
     world.aiTasks = (world.aiTasks || {});
     world.aiTasks[side] = tasks;
     return tasks;
+  }
+
+  /** 舰队中心，用来判断"哪一坨敌人离我们最近" */
+  function fleetCentre(world, side) {
+    var x = 0, y = 0, n = 0;
+    for (var i = 0; i < world.ships.length; i++) {
+      var sh = world.ships[i];
+      if (sh.side !== side || sh.sunk || !sh.alive) continue;
+      x += sh.pos.x; y += sh.pos.y; n++;
+    }
+    return n ? { x: x / n, y: y / n } : null;
+  }
+
+  /**
+   * 这一轮雷击打哪一坨：优先船多的（一雷多收），其次离舰队近的。
+   * 打的是"一坨"而不是"一条"—— 鱼雷本来就不是精确武器。
+   */
+  function salvoTarget(world, side, contacts) {
+    var cen = fleetCentre(world, side);
+    var best = null, bs = -1;
+    for (var i = 0; i < contacts.length; i++) {
+      var c = contacts[i];
+      var n = Math.max(1, c.count || 1);
+      var d = cen ? V.dist(cen, c.pos) : 0;
+      var sc = n * 2.2 + (1 - Math.min(d, 24000) / 24000);
+      if (c.uncertainty > 2500) sc *= 0.6;
+      if (sc > bs) { bs = sc; best = c; }
+    }
+    return best;
   }
 
   function distToContacts(ship, contacts) {
@@ -497,10 +579,23 @@
 
   /* ---------------------------------------------------------------- 对外 */
 
+  /**
+   * 这条舰这一轮参加的齐射（没参加就返回 null）。
+   * 只有"打的是同一个目标簇"才算同一次齐射。
+   */
+  function salvoFor(world, ship) {
+    var m = memoOf(world, ship.side);
+    if (!m.salvo) return null;
+    if (!ship.aiTask || ship.aiTask.targetId !== m.salvo.targetId) return null;
+    return m.salvo;
+  }
+
   N.Tactics = {
     ROLE: ROLE,
     LABEL: LABEL,
     STAFF: STAFF,
+    salvoFor: salvoFor,
+    salvoTarget: salvoTarget,
     plan: plan,
     illuminate: illuminate,
     label: function (ship) {

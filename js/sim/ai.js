@@ -15,20 +15,38 @@
 
   var U = N.U, V = N.V, Geo = N.Geo;
 
+  /**
+   * 两国海军打的不是同一场仗，所以战法也不该一样。
+   *
+   * 美军有雷达火控（Mk 3/Mk 4 + SG），十几公里上就能解算射击诸元；
+   * 日军靠九四式光学方位盘，指挥仪本身很好，但**看不见就打不了**。
+   * 所以：
+   *   · 美军白天压到 7~16 km 对轰（8 英寸炮在这个距离上能打穿日舰舷侧），
+   *     夜里靠雷达拉到 11.5~16.5 km —— 这个距离上日军既看不见也打不着，
+   *     而美军能打。
+   *   · 日军必须**压进去**：5~11 km，光学指挥仪在这个距离上不吃亏，
+   *     而且进了九三式鱼雷的扇面。
+   *   · 美军不让日军进到 9.5 km 以内 —— 那是鱼雷射程。
+   *     （被照明弹照到就没这个便宜了：日军看得见，距离就得让出来。）
+   */
   var DOCTRINE = {
     US: {
-      engageMin: 9000,
-      engageMax: 17500,
-      torpFrac: 0.70,
-      torpSpread: 2.2,
+      engageMin: 7000,     // 白天两边都看得见，该压上去打穿甲弹
+      engageMax: 16000,
+      nightMin: 11500,     // 有雷达优势时（夜里、对方看不见）拉得更开
+      nightMax: 16500,
+      torpFrac: 0.72,
+      torpSpread: 2.0,
       aggression: 0.9
     },
     JP: {
-      engageMin: 8000,
-      engageMax: 14500,
-      torpFrac: 0.45,
-      torpSpread: 2.8,
-      aggression: 1.15
+      engageMin: 5200,
+      engageMax: 11500,
+      nightMin: 5200,
+      nightMax: 11500,
+      torpFrac: 0.42,
+      torpSpread: 2.6,
+      aggression: 1.2
     }
   };
 
@@ -101,6 +119,11 @@
 
   /** 找最近的被护航对象（运输船 / 撤退舰） */
   function wardOf(world, ship) {
+    // 参谋部点名要护送的那条舰（撤退中的伤舰）优先
+    if (ship.aiTask && ship.aiTask.wardId) {
+      var w0 = world.shipById(ship.aiTask.wardId);
+      if (w0 && !w0.sunk && w0.alive) return w0;
+    }
     var best = null, bd = 1e9;
     for (var i = 0; i < world.ships.length; i++) {
       var o = world.ships[i];
@@ -308,17 +331,29 @@
     // 雷击航路上顺手也开炮
     ship.engage = range < ship.gunRangeMax * 0.98;
 
-    if (ai.torpCooldown <= world.time && !ship.ffTrack && torpedoWindowOpen(world, ship, track)) {
+    /* 协同齐射：参谋部给这一轮雷击舰排了"分道"和"齐射时刻"。
+       目标位置本身有误差，几条舰横着铺开、差不多同时放雷，
+       目标往哪边躲都会撞上一条。 */
+    var salvo = (N.Tactics && N.Tactics.salvoFor) ? N.Tactics.salvoFor(world, ship) : null;
+    var lane = (ship.aiTask && ship.aiTask.lane) || 0;
+    var holding = !!(salvo && world.time < salvo.readyAt);
+
+    if (!holding && ai.torpCooldown <= world.time && !ship.ffTrack &&
+      torpedoWindowOpen(world, ship, track)) {
       var trng = ship.torpRangeMax * doc.torpFrac;
       var rel = Math.abs(U.angDiff(brg, ship.heading));
       if (range < trng && rel > 40 && rel < 140) {
         // 距离越远，扇面越宽 —— 远了目标跑得出散布
         var spread = U.clamp(1.3 + range / 5200, 1.3, 4.4);
+        // 分道：横着偏开几百米，几条舰的雷不叠在一个点上
+        var aim = lane
+          ? Geo.dest(track.pos, U.norm360(brg + 90), lane * 480)
+          : track.pos;
         for (var ti = 0; ti < ship.torps.length; ti++) {
           var mount = ship.torps[ti];
           if (mount.disabled || mount.destroyed || mount.fault || mount.loaded <= 0) continue;
           var n = Math.min(mount.loaded, 4);
-          var fired = N.Combat.launchTorpedoes(world, ship, mount, track.pos,
+          var fired = N.Combat.launchTorpedoes(world, ship, mount, aim,
             track.course, track.speed, n, spread);
           if (fired > 0) {
             ai.torpCooldown = world.time + rng.range(150, 220);
@@ -340,6 +375,14 @@
     }
 
     var fireR = ship.torpRangeMax * doc.torpFrac;
+    if (holding && range > fireR * 0.75) {
+      // 还没到齐射时刻，而且还有余量：先占位（略偏一点，别一直正对着）
+      var hb = Geo.bearing(ship.pos, track.pos);
+      var wantH = U.norm360(hb + (lane >= 0 ? 55 : -55));
+      ship.orderedHeading = avoidLand(world, ship, avoidShips(world, ship, wantH), track.pos);
+      ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.85;
+      return;
+    }
     if (range > fireR * 1.05) {
       // 还没到射程：全速拦截
       var want = Geo.interceptBearing(ship.pos, track.pos, track.course,
@@ -537,6 +580,16 @@
          参谋部派的侦察舰直奔可疑海域，不和船队挤在一起。 */
       if (role === T.SCOUT) { doScout(world, ship, ai, doc); return; }
 
+      /* 刚才还在打它，一转眼丢了：往它最后出现的位置追，
+         而不是掉头回预设海域 —— 它多半只是躲进了雨飑或者夜暗里。 */
+      var lastP = ship.aiTask && ship.aiTask.lastPos;
+      if (lastP && (role === T.GUN || role === T.TORPEDO) &&
+        world.time - lastP.t < 240 && V.dist(ship.pos, lastP) > 3500) {
+        ship.orderedHeading = avoidLand(world, ship, Geo.bearing(ship.pos, lastP), lastP);
+        ship.orderedSpeed = ship.effectiveMaxSpeed() * 0.9;
+        return;
+      }
+
       var toward = (world.searchPos && world.searchPos[ship.side === 'US' ? 'JP' : 'US'])
         || world.homePos[ship.side === 'US' ? 'JP' : 'US'];
       // 只有无线电测向方位时：整队顺着那个方位压上去，
@@ -626,6 +679,18 @@
     /* ---------- 机动 ---------- */
     /* 舰艇在炮战中并不会持续蛇行：航向每隔十几秒才修正一次，
        这也让鱼雷的提前量解算变得有意义。 */
+    /* 雷达优势：夜里能看见对方、对方看不见自己。
+       这种时候不抢近战，拉开距离慢慢打 —— 对方连你在哪都不知道。
+       一旦自己被照明弹照亮，这个便宜就没了，距离要让出来。 */
+    var visNow = (world.weather && world.weather.visibility) || 12000;
+    var radarEdge = !!ship.cls.radar && visNow < 9000 &&
+      world.illuminationAt(ship.pos) <= 0;
+    /* 只有大舰才"拉开打"：驱逐舰的 5 英寸炮在 11 km 上打不准，
+       而且它们的鱼雷射程只有 6 km —— 躲远了等于什么也做不了。 */
+    var canStandOff = radarEdge && ship.cls.type !== 'DD';
+    var eMin = canStandOff ? (doc.nightMin || doc.engageMin) : doc.engageMin;
+    var eMax = canStandOff ? (doc.nightMax || doc.engageMax) : doc.engageMax;
+
     var stateChanged = (ai.lastState !== ai.state);
     ai.lastState = ai.state;
     var force = stateChanged || world.time < ai.turnAwayUntil;
@@ -635,13 +700,14 @@
       if (world.time < ai.turnAwayUntil) {
         // 发射后脱离：把舷侧/舰尾转向敌方
         wantHeading = U.norm360(brg + 115);
-      } else if (range > doc.engageMax) {
+      } else if (range > eMax) {
         // 接近：取拦截航向
         wantHeading = Geo.interceptBearing(ship.pos, track.pos, track.course, track.speed * U.KNOT_MS,
           ship.effectiveMaxSpeed() * U.KNOT_MS);
-      } else if (range < doc.engageMin) {
-        // 太近：拉开距离
-        wantHeading = U.norm360(brg + 150);
+      } else if (range < eMin) {
+        // 太近：先摆到 100° 边打边把距离拉开（炮还能响）；
+        // 被逼到很近才真的掉头走 —— 掉头就意味着把炮都背过去。
+        wantHeading = U.norm360(brg + (range < eMin * 0.7 ? 145 : 100));
       } else {
         // 保持舷侧对敌，便于全炮门和鱼雷发射
         var side = (U.angDiff(brg, ship.heading) >= 0) ? 1 : -1;
@@ -652,7 +718,7 @@
       wantHeading = avoidShips(world, ship, wantHeading);
       ai.desiredHeading = wantHeading;
 
-      var speedFrac = range > doc.engageMax ? 0.95 : (range < doc.engageMin ? 0.85 : 0.72);
+      var speedFrac = range > eMax ? 0.95 : (range < eMin ? 0.98 : 0.72);
       if (world.time < ai.turnAwayUntil) speedFrac = 1.0;
       ai.desiredSpeed = ship.effectiveMaxSpeed() * speedFrac;
     }
