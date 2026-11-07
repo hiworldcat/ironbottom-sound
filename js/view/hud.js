@@ -1935,7 +1935,12 @@
       '<div class="obj-item"><span class="ob-mark">▮</span><span>血条上方挂<b>故障标签</b>，只在真出问题的时候才冒出来，最多三个，多的写 <b>+N</b></span></div>' +
       '<div class="obj-item"><span class="ob-mark">▮</span><span>标签一共十一种：<b>进水 · 火灾 · 舵机 · 电力 · 动力 · 火控 · 雷达 · 电台 · 识别器 · 火炮 · 鱼雷</b></span></div>' +
       '<div class="obj-item"><span class="ob-mark">▮</span><span><b>只写根因，不写后果</b>：全船没电的时候雷达、电台、识别器是一起灭的，图上只挂一条「电力」，不会把四个结果都列出来</span></div>' +
-      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>敌舰永远不画</b>。海图上只有己方有血条和标签 —— 给敌舰画血条等于白送情报</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>血条是旧报告</b>：视距外的舰 11~16 秒报一次，24 秒基础延迟 + 每公里 1.8 秒。刚被打哑的僚舰，图上可能还挂着满血的绿条，过一分钟才追上真实值</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>只有<b>指挥舰自己</b>和<b>视距内直接看得见</b>的舰是实时的</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>鼠标停在舰上</b>弹出完整舰况：舰名、五个分区的具体百分比、全部标签 —— 被 <b>+N</b> 收起来的那些在这里全展开</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>敌舰永远不画血条和标签</b>。海图上只有己方有 —— 给敌舰画血条等于白送情报</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>但<b>烧起来的敌舰看得见</b>：瞭望哨在十几公里外就能认出火光，图上给那条接触挂一簇火苗 + 「火光」。雷达对一团火完全无感，所以只有目视观测才会带这个标记</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>看不见之后火光会变旧，标签写「火光 42s前」—— 它可能已经灭了，也可能还在烧，你自己掂量</span></div>' +
       '<div class="obj-item"><span class="ob-mark">▮</span><span><b>回放里两边都画</b>，而且用的是当时那一帧的状态。拖着时间轴，血条会一段段变短 —— 那艘舰是哪一轮齐射之后哑掉的，看得清清楚楚</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +

@@ -817,6 +817,19 @@
     ELEC: 256
   };
 
+  /** 五个一级分区的血量比例（船体 / 上层 / 武器 / 通信 / 动力），0~1 */
+  function zoneFracs(ship) {
+    var z = ship.zone || {}, zm = ship.zoneMax || {};
+    function f(cur, max) { return max > 0 ? U.clamp01(cur / max) : 1; }
+    return [
+      f(ship.hull, ship.hullMax),
+      f(z.superstructure, zm.superstructure),
+      f(z.weapons, zm.weapons),
+      f(z.comms, zm.comms),
+      f(z.power, zm.power)
+    ];
+  }
+
   function failMask(ship) {
     var m = 0, i;
     if (!radarOk(ship)) m |= FAIL.RADAR;
@@ -847,6 +860,7 @@
   N.Damage = {
     FAIL: FAIL,
     failMask: failMask,
+    zoneFracs: zoneFracs,
     init: init,
     update: update,
     routeDamage: routeDamage,

@@ -274,6 +274,139 @@ console.log("\n[5] 真打一场：回放到后半段，图上确实有船挂着�
     '回放里美日双方的舰都在（两边都显示血条）');
 }
 
+/* ------------------------------------------------------------------ */
+console.log("\n[6] 状态也有延迟：视距外的舰，血条是旧报告");
+{
+  /* 两条美舰隔 12 km，夜里能见度 6 km —— 僚舰在旗舰的视距之外 */
+  const sc = {
+    id: 'probe_lag', type: 'surface', title: 'probe', subtitle: '',
+    date: '1943 年 8 月 6 日 23:30', startTime: 23 * 3600, timeOfDay: 'night',
+    location: '', available: true, tags: [], floatplane: false,
+    env: {
+      visibility: 6000, windDir: 120, windSpeed: 8, seaState: 2, weather: '晴',
+      light: 'night', sunAzimuth: 0, rain: 0
+    },
+    playerSide: 'US', brief: [], intel: '',
+    objectives: [], zones: [], shoreTargets: [], forces: [],
+    victory: { timeLimit: 0 }
+  };
+  sc.forces.push({
+    side: 'US', group: 'TF', class: 'neworleans', name: '旗舰', hull: '',
+    x: Math.round(OPEN.x), y: Math.round(OPEN.y), heading: 90, speed: 0, role: 'flagship'
+  });
+  sc.forces.push({
+    side: 'US', group: 'TF', class: 'fletcher', name: '僚舰', hull: '',
+    x: Math.round(OPEN.x + 12000), y: Math.round(OPEN.y), heading: 90, speed: 0, role: 'screen'
+  });
+  sc.forces.push({
+    side: 'JP', group: 'IJN', class: 'kagero', name: '夕立', hull: '',
+    x: Math.round(OPEN.x + 20000), y: Math.round(OPEN.y), heading: 270, speed: 0, role: 'flagship'
+  });
+  const w = new N.World(sc, { seed: 909 });
+  const flag = w.ships.find((x) => x.name === '旗舰');
+  const mate = w.ships.find((x) => x.name === '僚舰');
+  for (let i = 0; i < 400; i++) w.update(0.1);   // 让链路先跑起来
+
+  const before = N.Command.ownView(w, mate);
+  ok(!!before && before.zfrac && before.zfrac.length === 5, '僚舰的报告里有分区比例');
+
+  // 僚舰被打掉一半船体、武器全毁
+  mate.hull = mate.hullMax * 0.5;
+  mate.zone.weapons = 0;
+  mate.mounts.forEach((m) => { m.disabled = true; m.destroyed = true; });
+
+  const live = N.Damage.zoneFracs(mate);
+  for (let i = 0; i < 30; i++) w.update(0.1);    // 3 秒：报告还在路上
+  const lag = N.Command.ownView(w, mate);
+  ok(lag.zfrac[0] > 0.95, '受伤 3 秒后，图上血条还是满的（报告没到）');
+  ok(lag.zfrac[0] !== live[0], '图和真实值确实不一样（这才叫信息不透明）');
+  ok((lag.failMask & N.Damage.FAIL.GUNS) === 0, '火炮标签也还没到');
+
+  // 等足够久（11~16 秒的报文周期 + 24 秒基础延迟 + 每公里 1.8 秒）
+  for (let i = 0; i < 900; i++) w.update(0.1);
+  const after = N.Command.ownView(w, mate);
+  ok(Math.abs(after.zfrac[0] - live[0]) < 0.06, '90 秒后血条追上了真实值（' +
+    Math.round(after.zfrac[0] * 100) + '% vs ' + Math.round(live[0] * 100) + '%）');
+  ok((after.failMask & N.Damage.FAIL.GUNS) !== 0, '90 秒后「火炮」标签也到了');
+
+  // 旗舰自己是实时的
+  flag.hull = flag.hullMax * 0.4;
+  w.update(0.1);
+  const self = N.Command.ownView(w, flag);
+  ok(self.zfrac[0] < 0.45, '旗舰自己的血条是实时的（你自己就在这条船上）');
+}
+
+/* ------------------------------------------------------------------ */
+console.log("\n[7] 敌舰起火：只有瞭望哨看得见");
+{
+  const w = duel("neworleans", "kagero", 4000);
+  const jp = w.shipsOf("JP")[0];
+  jp.fire = 60;
+
+  /* 直接喂两条回波给融合器：一条雷达的、一条目视的。
+     雷达对一团火无感，所以只有目视那条能带出火光。 */
+  const map = {};
+  const mk = (visual, src) => ({
+    key: "X1", members: ["X1"], count: 1, countKnown: true,
+    pos: { x: 100, y: 100 }, posErr: 500, errR: 500, errC: 500, axis: 0,
+    range: 9000, bearing: 0, idLevel: 1, source: src,
+    visual: visual, radar: !visual, esm: false, tgt: jp
+  });
+  N.Sensors.fuse(w, map, mk(false, "radar"), 0.1, "US", null);
+  ok(!map.X1.fireSeen, "雷达回波不带火光（雷达对一团火无感）");
+  ok(!map.X1.seenFireAt, "雷达回波也不记火光时间");
+
+  const t1 = w.time;
+  for (let i = 0; i < 10; i++) w.update(0.1);
+  N.Sensors.fuse(w, map, mk(true, "visual"), 0.1, "US", null);
+  ok(map.X1.fireSeen >= 12, "目视回波带上了火光（fireSeen=" + Math.round(map.X1.fireSeen) + "）");
+  ok(map.X1.seenFireAt > t1, "记下了“什么时候看见的火”");
+
+  // 真正打起来：日舰着火，美军图上能看见火光
+  const w2 = duel("neworleans", "kagero", 4000);
+  const jp2 = w2.shipsOf("JP")[0];
+  jp2.fire = 45;
+  for (let i = 0; i < 30; i++) w2.update(0.1);
+  const tr = Object.keys(w2.tracks.US || {}).map((k) => w2.tracks.US[k])
+    .filter((t) => !t.fromFlash)[0];
+  ok(tr && tr.fireSeen >= 12, "实战场合：图上那条接触带着火光");
+
+  // 看不见之后，火光的时间戳不再刷新
+  const seenAt = tr.seenFireAt;
+  jp2.pos.x += 80000;
+  for (let i = 0; i < 250; i++) w2.update(0.1);
+  ok(Math.abs(tr.seenFireAt - seenAt) < 1e-6 && w2.time - tr.seenFireAt > 15,
+    "看不见之后火光停在最后一次目视的时刻（" + Math.round(w2.time - tr.seenFireAt) + "s 前）");
+}
+
+/* ------------------------------------------------------------------ */
+console.log("\n[8] 标签顺序：先写「还能不能打」");
+{
+  const order = ["火炮", "鱼雷", "舵机", "动力", "电力", "火控", "雷达", "电台", "识别器"];
+  const w = duel('neworleans', 'kagero', 9000);
+  const s = w.shipsOf('US')[0];
+  // 一半炮塔 + 电台 + 识别器全坏
+  let n = 0;
+  for (const m of s.mounts) { if (n < 2) { m.disabled = true; m.destroyed = true; n++; } }
+  s.radioDestroyed = true;
+  s.iffDestroyed = true;
+  const tags = view.shipTags.call(view, s).map((t) => t.t);
+  const gi = tags.indexOf("火炮");
+  ok(gi >= 0, '火炮标签在');
+  ok(gi < tags.indexOf("电台") || tags.indexOf("电台") < 0, '火炮排在电台前面（' + tags.join("/") + '）');
+  const shown = tags.slice(0, 3);
+  ok(shown.indexOf("火炮") >= 0, '最多挂三个时，「火炮」不会被 +N 吃掉（' + shown.join("/") + '）');
+
+  // 再加一个舵机，凑到四个，验证 +N
+  s.rudder.destroyed = true;
+  const tags4 = view.shipTags.call(view, s).map((t) => t.t);
+  ok(tags4.length >= 4, '凑到 ' + tags4.length + ' 个标签（' + tags4.join("/") + '）');
+  ok(tags4.slice(0, 3).indexOf("火炮") >= 0, '前三个里仍然有「火炮」');
+  const c = mockCtx();
+  view.drawShipStatus.call(view, c, s, 400, 300, 40, 8, {});
+  ok(c.texts.some((t) => /^\+\d+$/.test(t)), '标签超过三个 → 出现 +N（' + c.texts.join(" ") + '）');
+}
+
 console.log("");
 if (bad === 0) console.log("✅ 舰况速览（血条 + 标签）自检全部通过");
 else { console.log("❌ " + bad + " 项失败"); process.exitCode = 1; }

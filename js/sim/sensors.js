@@ -547,6 +547,15 @@
         }
       }
 
+      /* ---- 火光：只有瞭望哨看得见，雷达对一团火完全无感 ----
+         烧起来的船是夜里最好认的目标，这条信息不该被藏起来；
+         但它是"看见的"，所以只能由目视观测刷新，而且会随着看不见而变旧。 */
+      if (echo.visual && echo.tgt) {
+        tr.fireSeen = echo.tgt.fire || 0;
+        tr.floodSeen = echo.tgt.flood || 0;
+        tr.seenFireAt = world.time;
+      }
+
       // ---- 由连续定位推算航向航速（带噪声） ----
       // 闪光航迹没有航向：那是"有人在那边开炮"，不是一条正在走的船
       if (tr.fromFlash) return tr;

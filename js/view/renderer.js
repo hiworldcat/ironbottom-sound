@@ -33,16 +33,19 @@
   }
 
   /* 和 N.Damage.FAIL 的位一一对应 */
+  /* 顺序 = 严重程度 = 被 +N 吃掉的先后。
+     原则：先写“还能不能打、还能不能动”，再写“能不能看、能不能报”。
+     电台坏了这种事不该把“半边炮哑了”挤进 +N。 */
   var FAIL_TAGS = [
+    [64, '火炮', '#ff6b6b'],   // GUNS
+    [128, '鱼雷', '#8fb8ff'],  // TORPS
     [16, '舵机', '#ffc857'],   // RUDDER
-    [256, '电力', '#e8d95f'],  // ELEC —— 全船没电
     [32, '动力', '#c2ccd6'],   // POWER —— 主机
+    [256, '电力', '#e8d95f'],  // ELEC —— 全船没电
     [8, '火控', '#c08bff'],    // FC
     [1, '雷达', '#4ad9d9'],    // RADAR
     [2, '电台', '#7fe0b0'],    // RADIO
-    [4, '识别器', '#9be07f'],  // IFF
-    [64, '火炮', '#ff6b6b'],   // GUNS
-    [128, '鱼雷', '#8fb8ff']   // TORPS
+    [4, '识别器', '#9be07f']   // IFF
   ];
 
   /* 没电的时候雷达/电台/识别器是一起灭的 —— 那是「电力」的后果，不再单独挂标签 */
@@ -173,6 +176,7 @@
     this.drawTracks(ctx, world, ui, cam, W, H);
     this.drawPlanes(ctx, world, cam, W, H);
     this.drawShips(ctx, world, ui, cam, W, H);
+    this.drawShipTooltip(ctx, world, ui, cam, W, H);
     this.drawAttribution(ctx, world, cam, W, H);
     this.drawSelection(ctx, world, ui, cam, W, H);
     this.drawBearingReadout(ctx, world, ui, cam, W, H);
@@ -716,6 +720,40 @@
         ctx.restore();
       }
 
+      /* ---- 火光：这条船在烧 ----
+         只有瞭望哨看得见（雷达对一团火无感），所以 tr.fireSeen 只由目视刷新，
+         看不见之后会慢慢变旧 —— 图上写「火光 42s前」，你自己掂量还准不准。 */
+      var fireAge = tr.seenFireAt ? world.time - tr.seenFireAt : 1e9;
+      var burning = (tr.fireSeen || 0) >= 12 && fireAge < 150 && !flash;
+      if (burning) {
+        var fA = U.clamp01((tr.fireSeen - 12) / 40) * 0.9 + 0.35;
+        var fFade = fireAge > 90 ? U.clamp01(1 - (fireAge - 90) / 60) : 1;
+        ctx.save();
+        ctx.globalAlpha = alpha * fA * fFade;
+        // 一小簇火苗
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - 13);
+        ctx.quadraticCurveTo(s.x + 4.5, s.y - 8, s.x, s.y - 4);
+        ctx.quadraticCurveTo(s.x - 4.5, s.y - 8, s.x, s.y - 13);
+        ctx.fillStyle = '#ff9a3c';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - 10.5);
+        ctx.quadraticCurveTo(s.x + 2.2, s.y - 8, s.x, s.y - 5.5);
+        ctx.quadraticCurveTo(s.x - 2.2, s.y - 8, s.x, s.y - 10.5);
+        ctx.fillStyle = '#ffe08a';
+        ctx.fill();
+        // 光晕
+        var fg = ctx.createRadialGradient(s.x, s.y - 8, 0, s.x, s.y - 8, 16);
+        fg.addColorStop(0, 'rgba(255,150,60,0.30)');
+        fg.addColorStop(1, 'rgba(255,150,60,0)');
+        ctx.beginPath();
+        ctx.arc(s.x, s.y - 8, 16, 0, Math.PI * 2);
+        ctx.fillStyle = fg;
+        ctx.fill();
+        ctx.restore();
+      }
+
       // 航向箭头（电探和闪光都没有航向，别画）
       if (tr.speed > 1 && !esm && !flash) {
         var hv = Geo.headingVec(tr.course);
@@ -749,7 +787,9 @@
       ctx.fillText(((esm || flash) ? '仅方位  ' : U.fmtRange(dist) + '  ') +
         ((esm || flash) ? '' : Math.round(tr.course) + '° / ' + tr.speed.toFixed(0) + 'kn  ') +
         errTxt + (age >= 5 ? '  ' + Math.round(age) + 's前' : '') +
-        (stale ? '  (陈旧)' : ''), s.x + unc + 6, s.y + 7);
+        (stale ? '  (陈旧)' : '') +
+        (burning ? '  火光' + (fireAge > 20 ? ' ' + Math.round(fireAge) + 's前' : '') : ''),
+        s.x + unc + 6, s.y + 7);
 
       ctx.restore();
     }
@@ -878,7 +918,10 @@
       if (!foe || world.replay) {
         var sL = Math.max(sh._replay ? 22 : 12, sh.cls.length * cam.zoom);
         var sB = Math.max(sh._replay ? 8 : 4, sh.cls.beam * cam.zoom);
-        this.drawShipStatus(ctx, sh, s.x, s.y, sL, sB, { alpha: stale ? 0.5 : 1 });
+        this.drawShipStatus(ctx, sh, s.x, s.y, sL, sB, {
+          alpha: stale ? 0.5 : 1,
+          report: pv
+        });
       }
 
       // 回放：指令航向（和实际航向不一致时）与舰名
@@ -945,9 +988,17 @@
     }
   };
 
-  /** 五个一级分区的血量比例（0~1）。回放里是录下来的，实时是现算的 */
-  Renderer.prototype.shipHealth = function (sh) {
+  /**
+   * 五个一级分区的血量比例（0~1）。
+   * 三种来源，优先级从高到低：
+   *   1. pv   —— 指挥舰收到的**报告**（视距外的舰，这是唯一正确的来源）
+   *   2. sh.zfrac —— 回放壳舰，录像里录下来的
+   *   3. 现算 —— 指挥舰自己、或者视距内直接看得见的舰
+   */
+  Renderer.prototype.shipHealth = function (sh, pv) {
+    if (pv && pv.zfrac && pv.zfrac.length === 5) return pv.zfrac;
     if (sh.zfrac && sh.zfrac.length === 5) return sh.zfrac;
+    if (N.Damage && N.Damage.zoneFracs) return N.Damage.zoneFracs(sh);
     var z = sh.zone || {}, zm = sh.zoneMax || {};
     function f(cur, max) { return max > 0 ? U.clamp01(cur / max) : 1; }
     return [
@@ -959,12 +1010,15 @@
     ];
   };
 
-  /** 这条舰现在该挂哪些标签（没毛病就返回空数组） */
-  Renderer.prototype.shipTags = function (sh) {
+  /** 这条舰现在该挂哪些标签（没毛病就返回空数组）。pv 是报告，有就用报告的 */
+  Renderer.prototype.shipTags = function (sh, pv) {
     var out = [];
-    if ((sh.flood || 0) >= 6) out.push({ t: '进水', c: '#4aa8ff' });
-    if ((sh.fire || 0) >= 5) out.push({ t: '火灾', c: '#ff8a3d' });
-    var mask = (sh.failMask != null) ? sh.failMask
+    var src = (pv && pv.zfrac) ? pv : sh;
+    var flood = src.flood != null ? src.flood : sh.flood;
+    var fire = src.fire != null ? src.fire : sh.fire;
+    if ((flood || 0) >= 6) out.push({ t: '进水', c: '#4aa8ff' });
+    if ((fire || 0) >= 5) out.push({ t: '火灾', c: '#ff8a3d' });
+    var mask = (src.failMask != null) ? src.failMask
       : ((N.Damage && N.Damage.failMask) ? N.Damage.failMask(sh) : 0);
     if (mask & 256) mask &= ~ELEC_CAUSED;
     for (var i = 0; i < FAIL_TAGS.length; i++) {
@@ -979,7 +1033,8 @@
    */
   Renderer.prototype.drawShipStatus = function (ctx, sh, x, y, L, B, opts) {
     opts = opts || {};
-    var bars = this.shipHealth(sh);
+    var pv = opts.report || null;
+    var bars = this.shipHealth(sh, pv);
     var hurt = false, i;
     for (i = 0; i < bars.length; i++) { if (bars[i] < 0.995) hurt = true; }
 
@@ -1020,12 +1075,12 @@
     }
     ctx.restore();
 
-    /* ---- 故障标签：最多挂三个，多出来的写 +N ---- */
-    var tags = this.shipTags(sh);
+    /* ---- 故障标签：最多挂三个，多出来的写 +N（悬浮可展开全部） ---- */
+    var tags = this.shipTags(sh, pv);
     if (!tags.length) return;
     var maxShow = opts.maxTags || 3;
     var shown = tags.slice(0, maxShow);
-    if (tags.length > maxShow) shown.push({ t: '+' + (tags.length - maxShow), c: '#9aa7b4' });
+    if (tags.length > maxShow) shown.push({ t: '+' + (tags.length - maxShow), c: '#9aa7b4', more: true });
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -1043,13 +1098,114 @@
     var ty = by - th - 3;
     for (i = 0; i < shown.length; i++) {
       var tw2 = widths[i];
-      ctx.fillStyle = 'rgba(4,10,16,0.78)';
+      ctx.fillStyle = shown[i].more ? 'rgba(20,30,42,0.86)' : 'rgba(4,10,16,0.78)';
       ctx.fillRect(tx, ty, tw2, th);
       ctx.fillStyle = shown[i].c;
       ctx.fillRect(tx, ty, 1.6, th);
       ctx.fillStyle = shown[i].c;
       ctx.fillText(shown[i].t, tx + tw2 / 2 + 0.8, ty + th / 2 + 0.5);
+      if (shown[i].more) {
+        // 虚框：告诉玩家“这里还有，鼠标移上去看全”
+        ctx.strokeStyle = 'rgba(154,167,180,0.55)';
+        ctx.lineWidth = 0.8;
+        ctx.setLineDash([2, 2]);
+        ctx.strokeRect(tx + 0.4, ty + 0.4, tw2 - 0.8, th - 0.8);
+        ctx.setLineDash([]);
+      }
       tx += tw2 + gap;
+    }
+    ctx.restore();
+  };
+
+  /**
+   * 鼠标停在己方舰上时，弹出完整的舰况：五个分区的具体百分比 + 全部标签。
+   * 图上最多只挂三个标签（再多就糊了），被 +N 收起来的那些在这里展开。
+   */
+  Renderer.prototype.drawShipTooltip = function (ctx, world, ui, cam, W, H) {
+    if (!ui || !ui.mouseWorld) return;
+    var ms = cam.w2s(ui.mouseWorld, W, H);
+    var best = null, bestD = 1e9;
+    for (var i = 0; i < world.ships.length; i++) {
+      var sh = world.ships[i];
+      if (sh.sunk) continue;
+      var foe = sh.side !== world.playerSide;
+      if (foe && !world.replay) continue;
+      var pv = this.plotView(world, sh);
+      var pp = (pv && pv.pos) ? pv.pos : sh.pos;
+      var sp = cam.w2s(pp, W, H);
+      var d = Math.sqrt((sp.x - ms.x) * (sp.x - ms.x) + (sp.y - ms.y) * (sp.y - ms.y));
+      if (d < 26 && d < bestD) { bestD = d; best = { sh: sh, pv: pv, sp: sp }; }
+    }
+    if (!best) return;
+
+    var sh = best.sh, pv = best.pv;
+    var bars = this.shipHealth(sh, pv);
+    var tags = this.shipTags(sh, pv);
+    var wts = (sh.zones && sh.zones.hull) ? [
+      sh.zones.hull, sh.zones.superstructure, sh.zones.weapons,
+      sh.zones.comms, sh.zones.power
+    ] : ZONE_W;
+    var names = ['舰体', '上层', '武器', '通讯', '动力'];
+
+    var pad = 8, rowH = 13, bw = 54, bh = 4;
+    var pw = 148, ph = pad * 2 + 16 + 5 * rowH + (tags.length ? 8 + tags.length * 12 : 0);
+    var px = best.sp.x + 18, py = best.sp.y - ph - 12;
+    if (px + pw > W - 6) px = best.sp.x - pw - 18;
+    if (py < 6) py = best.sp.y + 16;
+    if (px < 6) px = 6;
+    if (py + ph > H - 6) py = H - 6 - ph;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,13,21,0.92)';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = 'rgba(120,200,240,0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '11px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = 'rgba(190,235,255,0.98)';
+    var ageTxt = pv ? Math.round(world.time - (pv.reportedAt || world.time)) : 0;
+    ctx.fillText(sh.name, px + pad, py + pad + 6);
+    if (pv && ageTxt > 3) {
+      ctx.font = '9px "Microsoft YaHei", sans-serif';
+      ctx.fillStyle = 'rgba(255,205,120,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText('报告 ' + ageTxt + 's 前', px + pw - pad, py + pad + 6);
+      ctx.textAlign = 'left';
+    }
+
+    var ry = py + pad + 20;
+    ctx.font = '9px "Microsoft YaHei", sans-serif';
+    for (var k = 0; k < 5; k++) {
+      ctx.fillStyle = 'rgba(170,190,205,0.9)';
+      ctx.fillText(names[k], px + pad, ry + bh);
+      ctx.fillStyle = 'rgba(120,140,155,0.25)';
+      ctx.fillRect(px + pad + 24, ry, bw, bh);
+      ctx.fillStyle = hpColor(bars[k]);
+      ctx.fillRect(px + pad + 24, ry, bw * bars[k], bh);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = hpColor(bars[k]);
+      ctx.fillText(Math.round(bars[k] * 100) + '%', px + pw - pad, ry + bh);
+      ctx.textAlign = 'left';
+      ry += rowH;
+    }
+
+    if (tags.length) {
+      ry += 4;
+      ctx.font = '9px "Microsoft YaHei", sans-serif';
+      var tx = px + pad;
+      for (var t = 0; t < tags.length; t++) {
+        var tw = ctx.measureText(tags[t].t).width + 8;
+        if (tx + tw > px + pw - pad) { tx = px + pad; ry += 13; }
+        ctx.fillStyle = 'rgba(4,10,16,0.9)';
+        ctx.fillRect(tx, ry, tw, 11);
+        ctx.fillStyle = tags[t].c;
+        ctx.fillRect(tx, ry, 1.6, 11);
+        ctx.fillText(tags[t].t, tx + 4.5, ry + 6);
+        tx += tw + 3;
+      }
     }
     ctx.restore();
   };
@@ -1124,8 +1280,9 @@
       ctx.fillStyle = 'rgba(255,240,200,' + (0.55 * (1 - sinceHit / 0.7)) + ')';
       ctx.fill();
     }
-    if (sh.fire > 15 && !sinking) {
-      var fa = U.clamp01(sh.fire / 100) * 0.55;
+    var fireNow = (pv && pv.fire != null) ? pv.fire : sh.fire;
+    if (fireNow > 15 && !sinking) {
+      var fa = U.clamp01(fireNow / 100) * 0.55;
       var rg = ctx.createRadialGradient(x, y, 0, x, y, L * 0.9);
       rg.addColorStop(0, 'rgba(255,150,60,' + fa + ')');
       rg.addColorStop(1, 'rgba(255,90,20,0)');

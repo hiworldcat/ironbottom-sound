@@ -498,6 +498,28 @@ try {
     console.log('回放舰况: 挂标签', tagged, ' 美', both.US, ' 日', both.JP);
     if (!both.US || !both.JP) logErr(new Error('回放里不是两边都有舰（血条应两边都画）'));
 
+    /* 血条跟着报告走：视距外的舰，图上写的是旧数字 */
+    try {
+      const w0 = N.game.world;
+      const mine = w0.ships.filter(s => s.side === w0.playerSide && !s.sunk);
+      const lag = mine.map(s => ({ s: s, pv: N.Command.ownView(w0, s) }))
+        .filter(o => o.pv && o.pv.zfrac)
+        .map(o => ({
+          name: o.s.name,
+          live: Math.round(N.Damage.zoneFracs(o.s)[0] * 100),
+          shown: Math.round(o.pv.zfrac[0] * 100),
+          age: Math.round(w0.time - (o.pv.reportedAt || w0.time))
+        }));
+      const stale = lag.filter(o => o.age > 5);
+      console.log('血条跟随报告:', stale.length, '条是旧报告',
+        stale.slice(0, 3).map(o => o.name + ' 图' + o.shown + '%/实' + o.live + '%(' + o.age + 's)').join(' '));
+      // 旧报告的血条允许和实时值恰好相等（这十几秒里它没挨打），
+      // 但血条必须真的来自报告对象，不能偷偷读实时舰体
+      const fake = { zfrac: [0.5, 0.5, 0.5, 0.5, 0.5], flood: 0, fire: 0, failMask: 0 };
+      const fromReport = R.shipHealth.call(R, mine[0], fake);
+      if (Math.abs(fromReport[0] - 0.5) > 1e-9) logErr(new Error('shipHealth 没有优先用报告里的分区比例'));
+    } catch (e) { logErr(e); }
+
     // 画一遍，确认标签真的落到画布上
     textDrawn.length = 0;
     N.game.camera.zoom = 0.12;
@@ -510,6 +532,24 @@ try {
       const got = want.filter(t => textDrawn.indexOf(t) >= 0);
       console.log('回放标签落图:', want.join('/'), '→', got.join('/'));
       if (!got.length) logErr(new Error('回放里故障标签没有画到画布上'));
+
+      /* 悬浮：鼠标停在舰上要弹出完整舰况（被 +N 收起来的标签在这里展开） */
+      const cam = N.game.camera;
+      const RW = N.game.renderer.W, RH = N.game.renderer.H;
+      const sp = cam.w2s(victim.pos, RW, RH);
+      N.game.mouseWorld = cam.s2w(sp, RW, RH);
+      textDrawn.length = 0;
+      step(20);
+      const hasName = textDrawn.indexOf(victim.name) >= 0;
+      const pcts = textDrawn.filter(t => /^\d+%$/.test(t)).length;
+      const hasAllTags = R.shipTags.call(R, victim).every(t => textDrawn.indexOf(t.t) >= 0);
+      console.log('悬浮舰况:', victim.name, hasName ? '有舰名' : '无舰名',
+        '百分比', pcts, '个', hasAllTags ? '标签全展开' : '标签不全');
+      if (!hasName || pcts < 5 || !hasAllTags) {
+        logErr(new Error('悬浮提示不完整（舰名 ' + hasName + ' 百分比 ' + pcts + ' 标签全 ' + hasAllTags + '）'));
+      }
+      N.game.mouseWorld = null;
+      step(10);
     } else {
       console.log('回放标签落图: 这一帧没有受伤的舰（跳过）');
     }

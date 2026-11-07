@@ -93,13 +93,9 @@
         fl: Math.round(s.flood),
         fi: Math.round(s.fire),
         // 五个一级分区的血量比例（船体 / 上层 / 武器 / 通信 / 动力），回放里画血条用
-        z: [
-          Math.round(U.clamp01(s.hull / s.hullMax) * 100),
-          Math.round(s.zoneFrac('superstructure') * 100),
-          Math.round(s.zoneFrac('weapons') * 100),
-          Math.round(s.zoneFrac('comms') * 100),
-          Math.round(s.zoneFrac('power') * 100)
-        ],
+        z: (N.Damage && N.Damage.zoneFracs)
+          ? N.Damage.zoneFracs(s).map(function (v) { return Math.round(v * 100); })
+          : [100, 100, 100, 100, 100],
         // 哪些功能坏了（雷达 / 电台 / 识别器 / 火控 / 舵机 / 动力 / 火炮 / 鱼雷）
         df: (N.Damage && N.Damage.failMask) ? N.Damage.failMask(s) : 0,
         st: s.sunk ? 2 : (s.sinking ? 1 : 0),

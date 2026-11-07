@@ -392,6 +392,10 @@
         superstructure: ship.zoneFrac('superstructure'),
         comms: ship.zoneFrac('comms')
       } : null,
+      /* 海图血条要用的五个分区比例，和 hull / fire 一样跟着这份报告一起走 ——
+         视距外的舰，你看到的血条也是旧的，不是实时的 */
+      zfrac: (N.Damage && N.Damage.zoneFracs) ? N.Damage.zoneFracs(ship) : null,
+      failMask: (N.Damage && N.Damage.failMask) ? N.Damage.failMask(ship) : 0,
       // 设备状态也要走报告 —— 视距外的舰，你看到的设备情况同样是旧的
       dev: devSnapshot(ship),
       sunk: !!ship.sunk,
@@ -452,6 +456,10 @@
           fromPlane: tr.fromPlane || null,
           fromFlash: !!tr.fromFlash,
           errR: tr.errR, errC: tr.errC, axis: tr.axis,
+          // 火光/重创是"看见的"，跟位置一样要跟着报告走，也会跟着变旧
+          fireSeen: tr.fireSeen || 0,
+          floodSeen: tr.floodSeen || 0,
+          seenFireAt: tr.seenFireAt || 0,
           observedAt: fx.t
         });
       }
@@ -607,6 +615,8 @@
             countKnown: o.countKnown !== false, phantom: !!o.phantom,
             fromPlane: o.fromPlane || null,
             fromFlash: !!o.fromFlash,
+            fireSeen: o.fireSeen || 0, floodSeen: o.floodSeen || 0,
+            seenFireAt: o.seenFireAt || 0,
             contributors: {}, latency: 0, esmOnly: !!o.esmOnly, bestErr: 1e9
           };
         }
@@ -619,6 +629,12 @@
         if (o.fromPlane) tr.fromPlane = o.fromPlane;
         if (o.fromFlash) tr.fromFlash = true;
         if (o.errR) { tr.errR = o.errR; tr.errC = o.errC; tr.axis = o.axis; }
+        // 火光：只认更新的目视报告，别让一条迟到的旧报告把火"灭"了
+        if (o.seenFireAt && o.seenFireAt > (tr.seenFireAt || 0)) {
+          tr.fireSeen = o.fireSeen || 0;
+          tr.floodSeen = o.floodSeen || 0;
+          tr.seenFireAt = o.seenFireAt;
+        }
 
         /* ---- 这份报告在路上走了多久 ---- */
         var age = Math.max(0, world.time - o.observedAt);
