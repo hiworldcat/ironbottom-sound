@@ -805,7 +805,48 @@
     return parts.join(' · ');
   }
 
+  /* ====================================================================== */
+  /*  图上小标签用的“哪些功能坏了”位掩码                                      */
+  /*  渲染层只认这 8 个位，海图、回放、录像共用同一套定义                      */
+  /* ====================================================================== */
+  var FAIL = {
+    RADAR: 1, RADIO: 2, IFF: 4, FC: 8,
+    RUDDER: 16, POWER: 32, GUNS: 64, TORPS: 128,
+    /* 电力是“根因”位：全船没电的时候，雷达、电台、识别器是一起灭的，
+       图上只该写一条「电力」，不该把四个结果都挂出来 */
+    ELEC: 256
+  };
+
+  function failMask(ship) {
+    var m = 0, i;
+    if (!radarOk(ship)) m |= FAIL.RADAR;
+    if (!radioOk(ship)) m |= FAIL.RADIO;
+    if (!iffOk(ship)) m |= FAIL.IFF;
+    // 火控指挥仪被打掉，或者上层建筑塌了一半（测距仪、指挥仪都在上面）
+    if (ship.fcDestroyed) m |= FAIL.FC;
+    else if (ship.sensorFactor && ship.sensorFactor() < 0.55) m |= FAIL.FC;
+    if (ship.rudder && (ship.rudder.destroyed || ship.rudder.faulted)) m |= FAIL.RUDDER;
+    else if (ship.steering != null && ship.steering < 55) m |= FAIL.RUDDER;
+    if (elecFailed(ship)) m |= FAIL.ELEC;
+    if (ship.engines && ship.engines.length && engineFrac(ship) < 0.55) m |= FAIL.POWER;
+    // 一半以上的炮 / 鱼雷管不能用了，才值得在图上标一笔
+    var gn = 0, gok = 0, tn = 0, tok = 0;
+    for (i = 0; i < ship.mounts.length; i++) {
+      gn++;
+      if (!ship.mounts[i].disabled && !ship.mounts[i].destroyed) gok++;
+    }
+    for (i = 0; i < ship.torps.length; i++) {
+      tn++;
+      if (!ship.torps[i].disabled && !ship.torps[i].destroyed) tok++;
+    }
+    if (gn && gok / gn <= 0.5) m |= FAIL.GUNS;
+    if (tn && tok / tn <= 0.5) m |= FAIL.TORPS;
+    return m;
+  }
+
   N.Damage = {
+    FAIL: FAIL,
+    failMask: failMask,
     init: init,
     update: update,
     routeDamage: routeDamage,

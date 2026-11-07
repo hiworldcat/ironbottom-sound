@@ -476,6 +476,47 @@ try {
   const pw = N.game.replay.sampleAt(N.game.replayT);
   if (!pw) logErr(new Error('回放采样返回空'));
 
+  /* 舰况速览：血条 + 故障标签（海图与回放共用同一套） */
+  try {
+    const R = N.Renderer.prototype;
+    const live = N.game.world.ships.filter(s => s.side === N.game.world.playerSide && !s.sunk);
+    const bars = live.map(s => R.shipHealth.call(R, s));
+    console.log('血条段数:', bars.length ? bars[0].length : 0,
+      ' 首舰:', bars[0] ? bars[0].map(v => Math.round(v * 100)).join('/') : '-');
+    if (!bars.length || bars[0].length !== 5) logErr(new Error('血条不是五段'));
+
+    // 回放里两边都要有血条和标签
+    N.game.replaySeek(N.game.replay.duration * 0.6);
+    step(50);
+    const rw = N.game.replay.sampleAt(N.game.replayT);
+    let tagged = 0, both = { US: 0, JP: 0 };
+    for (const sh of rw.ships) {
+      if (sh.sunk) continue;
+      if (R.shipTags.call(R, sh).length) tagged++;
+      if (both[sh.side] != null) both[sh.side]++;
+    }
+    console.log('回放舰况: 挂标签', tagged, ' 美', both.US, ' 日', both.JP);
+    if (!both.US || !both.JP) logErr(new Error('回放里不是两边都有舰（血条应两边都画）'));
+
+    // 画一遍，确认标签真的落到画布上
+    textDrawn.length = 0;
+    N.game.camera.zoom = 0.12;
+    const victim = rw.ships.filter(s => !s.sunk && R.shipTags.call(R, s).length)[0];
+    if (victim) {
+      N.game.camera.x = victim.pos.x; N.game.camera.y = victim.pos.y;
+      N.game.replayAuto = false;
+      step(50);
+      const want = R.shipTags.call(R, victim).map(t => t.t);
+      const got = want.filter(t => textDrawn.indexOf(t) >= 0);
+      console.log('回放标签落图:', want.join('/'), '→', got.join('/'));
+      if (!got.length) logErr(new Error('回放里故障标签没有画到画布上'));
+    } else {
+      console.log('回放标签落图: 这一帧没有受伤的舰（跳过）');
+    }
+  } catch (e) {
+    logErr(e);
+  }
+
   /* 回放溯源：放大后必须标出“这一发是谁打的 / 这条鱼雷是谁放的” */
   try {
     const rp = N.game.replay;

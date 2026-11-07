@@ -92,6 +92,16 @@
         hp: Math.round(U.clamp01(s.hull / s.hullMax) * 100),
         fl: Math.round(s.flood),
         fi: Math.round(s.fire),
+        // 五个一级分区的血量比例（船体 / 上层 / 武器 / 通信 / 动力），回放里画血条用
+        z: [
+          Math.round(U.clamp01(s.hull / s.hullMax) * 100),
+          Math.round(s.zoneFrac('superstructure') * 100),
+          Math.round(s.zoneFrac('weapons') * 100),
+          Math.round(s.zoneFrac('comms') * 100),
+          Math.round(s.zoneFrac('power') * 100)
+        ],
+        // 哪些功能坏了（雷达 / 电台 / 识别器 / 火控 / 舵机 / 动力 / 火炮 / 鱼雷）
+        df: (N.Damage && N.Damage.failMask) ? N.Damage.failMask(s) : 0,
         st: s.sunk ? 2 : (s.sinking ? 1 : 0),
         // 当时的“操作”：指令航向/航速、是否交战、打谁
         oh: Math.round(s.orderedHeading),
@@ -252,6 +262,8 @@
         speed: 0,
         hull: 100, hullMax: 100,
         flood: 0, fire: 0,
+        zfrac: [1, 1, 1, 1, 1],
+        failMask: 0,
         sinking: false, sunk: false, sinkTimer: 1,
         mounts: [],
         wake: [],
@@ -362,6 +374,10 @@
       sh.hull = sa.hp; sh.hullMax = 100;
       sh.flood = sa.fl;
       sh.fire = sa.fi;
+      if (sa.z) {
+        sh.zfrac = [sa.z[0] / 100, sa.z[1] / 100, sa.z[2] / 100, sa.z[3] / 100, sa.z[4] / 100];
+      }
+      sh.failMask = sa.df || 0;
       sh.sunk = sa.st === 2;
       sh.sinking = sa.st === 1;
       sh.sinkTimer = sh.sinking ? 1 : 1;

@@ -785,11 +785,13 @@
     return this.cls.combatPower * (0.15 + 0.85 * h) * (0.55 + 0.45 * s) * f * g;
   };
 
-  /** 还剩多少条鱼雷（管内 + 备用） */
+  /** 还能用多少条鱼雷（管内 + 备用架，打坏的发射管不算） */
   Ship.prototype.torpedoesLeft = function () {
     var n = 0;
     for (var i = 0; i < this.torps.length; i++) {
-      n += (this.torps[i].loaded || 0) + (this.torps[i].reserve || 0);
+      var t = this.torps[i];
+      if (t.disabled || t.destroyed) continue;
+      n += (t.loaded || 0) + (t.reserve || 0);
     }
     return n;
   };

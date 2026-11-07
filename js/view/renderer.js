@@ -13,6 +13,41 @@
   var DEG = U.DEG;
   var TAU = Math.PI * 2;
 
+  /* ==========================================================================
+   *  舰况速览：血条 + 故障标签
+   *
+   *  海图上不可能摊开详情面板，但“这条舰还能不能打”必须一眼看得出来。
+   *  血条按一级分区切段（船体 / 上层 / 武器 / 通信 / 动力），每段自己变色；
+   *  坏掉的功能在船上方挂小标签 —— 只在真坏了的时候才挂。
+   *  回放里也画，而且两边都画：复盘看的是真相。
+   * ========================================================================== */
+
+  /* 五个一级分区的默认权重（和 N.zonesFor 的兜底值一致） */
+  var ZONE_W = [0.44, 0.15, 0.19, 0.06, 0.16];
+
+  /** 血量比例 → 颜色 */
+  function hpColor(f) {
+    if (f > 0.66) return '#5fe08a';
+    if (f > 0.33) return '#ffc857';
+    return '#ff5f5f';
+  }
+
+  /* 和 N.Damage.FAIL 的位一一对应 */
+  var FAIL_TAGS = [
+    [16, '舵机', '#ffc857'],   // RUDDER
+    [256, '电力', '#e8d95f'],  // ELEC —— 全船没电
+    [32, '动力', '#c2ccd6'],   // POWER —— 主机
+    [8, '火控', '#c08bff'],    // FC
+    [1, '雷达', '#4ad9d9'],    // RADAR
+    [2, '电台', '#7fe0b0'],    // RADIO
+    [4, '识别器', '#9be07f'],  // IFF
+    [64, '火炮', '#ff6b6b'],   // GUNS
+    [128, '鱼雷', '#8fb8ff']   // TORPS
+  ];
+
+  /* 没电的时候雷达/电台/识别器是一起灭的 —— 那是「电力」的后果，不再单独挂标签 */
+  var ELEC_CAUSED = 1 | 2 | 4;
+
   /** 在 (sx,sy) 处沿罗经航向 hdg 画一根指针 */
   function needle(ctx, sx, sy, hdg, r, color, w, arrow, dash) {
     var a = (hdg - 90) * DEG;
@@ -839,6 +874,13 @@
       this.drawShip(ctx, sh, s.x, s.y, cam.zoom, ui, foe,
         pv && pv.heading != null ? pv.heading : sh.heading, stale, pv);
 
+      /* 舰况速览：己方舰一直显示；回放里两边都显示（复盘看的是真相） */
+      if (!foe || world.replay) {
+        var sL = Math.max(sh._replay ? 22 : 12, sh.cls.length * cam.zoom);
+        var sB = Math.max(sh._replay ? 8 : 4, sh.cls.beam * cam.zoom);
+        this.drawShipStatus(ctx, sh, s.x, s.y, sL, sB, { alpha: stale ? 0.5 : 1 });
+      }
+
       // 回放：指令航向（和实际航向不一致时）与舰名
       if (world.replay) {
         // 当时的航向命令目标点
@@ -901,6 +943,115 @@
         ctx.restore();
       }
     }
+  };
+
+  /** 五个一级分区的血量比例（0~1）。回放里是录下来的，实时是现算的 */
+  Renderer.prototype.shipHealth = function (sh) {
+    if (sh.zfrac && sh.zfrac.length === 5) return sh.zfrac;
+    var z = sh.zone || {}, zm = sh.zoneMax || {};
+    function f(cur, max) { return max > 0 ? U.clamp01(cur / max) : 1; }
+    return [
+      f(sh.hull, sh.hullMax),
+      f(z.superstructure, zm.superstructure),
+      f(z.weapons, zm.weapons),
+      f(z.comms, zm.comms),
+      f(z.power, zm.power)
+    ];
+  };
+
+  /** 这条舰现在该挂哪些标签（没毛病就返回空数组） */
+  Renderer.prototype.shipTags = function (sh) {
+    var out = [];
+    if ((sh.flood || 0) >= 6) out.push({ t: '进水', c: '#4aa8ff' });
+    if ((sh.fire || 0) >= 5) out.push({ t: '火灾', c: '#ff8a3d' });
+    var mask = (sh.failMask != null) ? sh.failMask
+      : ((N.Damage && N.Damage.failMask) ? N.Damage.failMask(sh) : 0);
+    if (mask & 256) mask &= ~ELEC_CAUSED;
+    for (var i = 0; i < FAIL_TAGS.length; i++) {
+      if (mask & FAIL_TAGS[i][0]) out.push({ t: FAIL_TAGS[i][1], c: FAIL_TAGS[i][2] });
+    }
+    return out;
+  };
+
+  /**
+   * 画一条舰的血条和故障标签。
+   * (x,y) 是舰体在屏幕上的中心，L/B 是舰影的长宽（像素）。
+   */
+  Renderer.prototype.drawShipStatus = function (ctx, sh, x, y, L, B, opts) {
+    opts = opts || {};
+    var bars = this.shipHealth(sh);
+    var hurt = false, i;
+    for (i = 0; i < bars.length; i++) { if (bars[i] < 0.995) hurt = true; }
+
+    /* ---- 血条：五段拼成一条，按分区权重分宽度 ---- */
+    var wts = (sh.zones && sh.zones.hull) ? [
+      sh.zones.hull, sh.zones.superstructure, sh.zones.weapons,
+      sh.zones.comms, sh.zones.power
+    ] : ZONE_W;
+    var wsum = 0;
+    for (i = 0; i < 5; i++) wsum += (wts[i] || 0);
+    if (!(wsum > 0)) { wts = ZONE_W; wsum = 1; }
+
+    var w = U.clamp(L * 1.2, 18, 54);
+    var hgt = hurt ? 3.4 : 2.6;
+    var bx = x - w / 2;
+    var by = y - B * 0.5 - 6 - hgt;
+    var alpha = opts.alpha == null ? 1 : opts.alpha;
+
+    ctx.save();
+    ctx.globalAlpha = alpha * (hurt ? 0.95 : 0.5);
+    // 底槽
+    ctx.fillStyle = 'rgba(4,10,16,0.72)';
+    ctx.fillRect(bx - 1, by - 1, w + 2, hgt + 2);
+    var cx = bx;
+    for (i = 0; i < 5; i++) {
+      var sw = w * (wts[i] || 0) / wsum;
+      if (sw < 0.6) sw = 0.6;
+      // 空的槽
+      ctx.fillStyle = 'rgba(120,140,155,0.22)';
+      ctx.fillRect(cx, by, sw - 0.6, hgt);
+      // 有血的那一截
+      var f = bars[i];
+      if (f > 0.004) {
+        ctx.fillStyle = hpColor(f);
+        ctx.fillRect(cx, by, (sw - 0.6) * f, hgt);
+      }
+      cx += sw;
+    }
+    ctx.restore();
+
+    /* ---- 故障标签：最多挂三个，多出来的写 +N ---- */
+    var tags = this.shipTags(sh);
+    if (!tags.length) return;
+    var maxShow = opts.maxTags || 3;
+    var shown = tags.slice(0, maxShow);
+    if (tags.length > maxShow) shown.push({ t: '+' + (tags.length - maxShow), c: '#9aa7b4' });
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '9px "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    var pad = 2.5, gap = 2, th = 11;
+    var widths = [], total = 0;
+    for (i = 0; i < shown.length; i++) {
+      var tw = ctx.measureText(shown[i].t).width + pad * 2;
+      widths.push(tw);
+      total += tw + (i ? gap : 0);
+    }
+    var tx = x - total / 2;
+    var ty = by - th - 3;
+    for (i = 0; i < shown.length; i++) {
+      var tw2 = widths[i];
+      ctx.fillStyle = 'rgba(4,10,16,0.78)';
+      ctx.fillRect(tx, ty, tw2, th);
+      ctx.fillStyle = shown[i].c;
+      ctx.fillRect(tx, ty, 1.6, th);
+      ctx.fillStyle = shown[i].c;
+      ctx.fillText(shown[i].t, tx + tw2 / 2 + 0.8, ty + th / 2 + 0.5);
+      tx += tw2 + gap;
+    }
+    ctx.restore();
   };
 
   Renderer.prototype.drawShip = function (ctx, sh, x, y, zoom, ui, foe, heading, stale, pv) {

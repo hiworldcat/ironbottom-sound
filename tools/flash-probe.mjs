@@ -250,6 +250,38 @@ console.log('\n[7] AI 不会对着一条闪光开炮');
     `AI 挑的目标${picked ? '是 ' + N.Sensors.idText(picked) : '为空'}，不是闪光`);
 }
 
+/* ------------------------------------------------ 8. 整场战役里也不会有无限鱼雷 */
+console.log('\n[8] 真打起来也没有无限鱼雷：全场景守恒检查');
+{
+  const ids = ['tassafaronga', 'vella_gulf', 'kolombangara', 'cape_st_george',
+    'empress_augusta', 'blackett_strait'];
+  let maxFired = 0, maxName = '', viol = 0, shots = 0;
+  for (const id of ids) {
+    const w = new N.World(N.Scenarios.get(id), { seed: 777, autopilot: true });
+    const init = new Map();
+    for (const s of w.ships) {
+      if (!s.torps || !s.torps.length) continue;
+      let t0 = 0;
+      for (const m of s.torps) t0 += (m.tubes || 0) + (m.reserve || 0);
+      init.set(s.id, t0);
+    }
+    for (let f = 0; f < 15000 && !w.ended; f++) w.update(0.1);
+    for (const s of w.ships) {
+      const t0 = init.get(s.id);
+      if (t0 == null) continue;
+      const fired = s.torpsFired || 0;
+      const left = s.torpedoesLeft();
+      shots += fired;
+      if (fired > t0) { viol++; console.log('  ✗ ' + id + ' ' + s.name + ' 放了 ' + fired + ' 条，但只带了 ' + t0); }
+      if (fired + left > t0) { viol++; console.log('  ✗ ' + id + ' ' + s.name + ' 放出 ' + fired + ' + 剩余 ' + left + ' > 携带 ' + t0); }
+      if (fired > maxFired) { maxFired = fired; maxName = s.name + '（' + id + '）'; }
+    }
+  }
+  ok(viol === 0, `6 场战役、每条舰的鱼雷都守恒（放出的 + 剩下的 = 携带的）`);
+  ok(maxFired <= 24, `单舰单场最多放了 ${maxFired} 条（${maxName}）—— 不超过妙高级的 24 条基数`);
+  ok(shots > 0, `6 场战役里双方一共放了 ${shots} 条鱼雷，没有一条是凭空变出来的`);
+}
+
 console.log('');
 if (bad === 0) console.log('✅ 炮口闪光与弹药自检全部通过');
 else { console.log(`❌ ${bad} 项不通过`); process.exitCode = 1; }

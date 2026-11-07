@@ -1928,6 +1928,15 @@
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>电力系统</b>一失灵，雷达、电台、识别器全停，无线电延迟 +1 分钟，炮击间隔 ×1.5，鱼雷装填 ×2，识别错误率 +1%；动力系统掉到 25% 以下也会连带失灵</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span><b>损管</b>每 10 分钟给船体和上层建筑回血，回多少看<b>损管档位</b>（美军约 7%，日军约 4%；开火 −2%、全速 −1%）；武器、通信、动力它修不了</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>详情面板的「设备与损管」一栏实时显示主机、舵机、电力、雷达、电台、识别器、火控的状态和下次抢修倒计时</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>海图上的舰况速览</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>己方每条舰的船体上方有一条<b>五段血条</b>：舰体 / 上层 / 武器 / 通讯 / 动力，按各自权重分宽度</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>每段<b>自己变色</b>：绿（&gt;66%）、琥珀（33~66%）、红（&lt;33%）。所以「舰体满、武器只剩三成」和「舰体只剩三成、武器满」一眼就能分开</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>没受伤时血条是半透明的暗绿，不抢眼；挨了打才变粗变亮</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>血条上方挂<b>故障标签</b>，只在真出问题的时候才冒出来，最多三个，多的写 <b>+N</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span>标签一共十一种：<b>进水 · 火灾 · 舵机 · 电力 · 动力 · 火控 · 雷达 · 电台 · 识别器 · 火炮 · 鱼雷</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>只写根因，不写后果</b>：全船没电的时候雷达、电台、识别器是一起灭的，图上只挂一条「电力」，不会把四个结果都列出来</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>敌舰永远不画</b>。海图上只有己方有血条和标签 —— 给敌舰画血条等于白送情报</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▮</span><span><b>回放里两边都画</b>，而且用的是当时那一帧的状态。拖着时间轴，血条会一段段变短 —— 那艘舰是哪一轮齐射之后哑掉的，看得清清楚楚</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>R 观看回放（双方真实舰位与机动）· 空格暂停 · 1/2/3/4 时间倍率</span></div>' +
