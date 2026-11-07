@@ -114,6 +114,9 @@
       var t = list[i];
       if (!t.pos) continue;
       if (t.phantom) continue;
+      /* 炮口闪光只能说明"那边有人在开炮"，不是一个可以分配射击任务的目标：
+         拿它当目标，几条舰会一起扑向一个点，打的全是空海面。 */
+      if (t.fromFlash) continue;
       if (t.esmOnly && !includeEsm) continue;
       if (world.time - t.lastSeen > age) continue;
       out.push(t);
@@ -125,12 +128,13 @@
     return (ship.flood > 55) || (ship.hull < ship.hullMax * 0.30);
   }
 
+  /** 还有没有雷可放：管内或者备用架上有都算 */
   function hasTorpedoes(ship) {
     if (!ship.torps || !ship.torps.length) return false;
     for (var i = 0; i < ship.torps.length; i++) {
       var m = ship.torps[i];
       if (m.disabled || m.destroyed || m.fault) continue;
-      if (m.loaded > 0) return true;
+      if ((m.loaded || 0) + (m.reserve || 0) > 0) return true;
     }
     return false;
   }
@@ -235,10 +239,20 @@
    */
   function plan(world, side) {
     var m = memoOf(world, side);
-    if (world.time < m.next) return null;
-    m.next = world.time + staffOf(side).planEvery;
-
     var st = staffOf(side);
+    /* 敌情一变就立刻重新分工：新接触出现、目标沉了、目标跟丢了，都算。
+       只按固定间隔重算的话，参谋部最多要等 6 秒才反应 —— 那几秒里
+       几条舰会一直压着一个已经过时的目标，而图上其实已经有好几个了。 */
+    var contacts = contactsOf(world, side);
+    var changed = (m.sig !== contacts.length);
+    if (world.time < m.next) {
+      // 变了也要有个最小间隔，免得雷达一闪一闪就把参谋部刷屏
+      if (!changed || world.time - (m.at || -999) < 1.5) return null;
+    }
+    m.sig = contacts.length;
+    m.at = world.time;
+    m.next = world.time + st.planEvery;
+
     var ships = aliveOf(world, side);
     var pending = [];
     var tasks = [];
@@ -302,7 +316,6 @@
     }
 
     /* ---- 3. 有敌情：分目标、派雷击 ---- */
-    var contacts = contactsOf(world, side);
     if (contacts.length) {
       /* 3a. 雷击组：几条舰打同一个目标簇，横着铺开，差不多同时放雷。
          不要各挑各的目标 —— 鱼雷的杀伤在于"一次来十几条，往哪躲都有一条"。 */

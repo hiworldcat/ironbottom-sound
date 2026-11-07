@@ -623,6 +623,24 @@
     game.hud.toast(any ? '开火' : '停火');
   };
 
+  /**
+   * 切换无烟弹（消焰发射药）。
+   * 夜里开炮会冒一团火球，十几公里外的瞭望哨都看得见 —— 用了它就没有这团火。
+   * 代价：最大射程打九二折、散布略大，而且只有一部分弹药是这种。
+   */
+  game.toggleFlashless = function () {
+    var ships = commandable();
+    if (!ships.length) return;
+    var avail = ships.filter(function (s) { return s.flashlessLeft && s.flashlessLeft() > 0; });
+    if (!avail.length) {
+      game.hud.toast('这些舰没有配发无烟弹');
+      return;
+    }
+    var any = avail.some(function (s) { return !s.flashlessOn; });
+    avail.forEach(function (s) { s.flashlessOn = any; });
+    game.hud.toast(any ? '改用无烟弹：夜里开炮不再暴露位置（射程 -8%）' : '改回普通弹：射程恢复，但炮口闪光会暴露位置');
+  };
+
   game.launchTorpedoes = function () {
     var ships = commandable();
     if (!ships.length) return;
@@ -997,6 +1015,7 @@
       if (k === 't') { game.launchTorpedoes(); return; }
       if (k === 's') { game.toggleSmoke(); return; }
       if (k === 'l') { game.fireStarshell(); return; }
+      if (k === 'n') { game.toggleFlashless(); return; }
       if (k === 'g') { game.formSquad(); return; }
       if (k === 'h') { game.toggleSquadTurnMode(); return; }
     if (k === 'k') { game.clearSquadRoute(); return; }

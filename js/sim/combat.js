@@ -130,18 +130,24 @@
     var rng = world.rng;
     var firedAny = false;
 
+    // 这一次齐射里有没有用普通发射药（有的话就会冒火球，暴露位置）
+    var flashCaliber = 0;
+
     for (var i = 0; i < ship.mounts.length; i++) {
       var m = ship.mounts[i];
       if (m.disabled || m.destroyed || m.fault || !m.ready) continue;
-      if (m.ammo < m.count) continue;
-      if (sol.range > m.gun.maxRange) continue;
+      /* 消焰（无烟）发射药：不冒火球，但初速略低 —— 最大射程打九二折，
+         而且这一炉药的均匀性差一点，散布大 6%。 */
+      var useFL = ship.flashlessOn && m.flashless >= m.count;
+      if (!useFL && m.ammo < m.count) continue;
+      if (sol.range > m.gun.maxRange * (useFL ? 0.92 : 1)) continue;
       if (!ship.mountArcOk(m, rel)) continue;
 
       // 炮塔尚未转到位
       var want = (m.arc === 'aft') ? U.angDiff(rel, 180) + 180 : U.angDiff(rel, 0);
       if (Math.abs(U.angDiff(m.train, want)) > 6) continue;
 
-      var sigma = dispersionSigma(world, ship, track, m.gun, sol.range);
+      var sigma = dispersionSigma(world, ship, track, m.gun, sol.range) * (useFL ? 1.06 : 1);
       var salvoId = 'V' + (++_salvoId);
 
       for (var g = 0; g < m.count; g++) {
@@ -169,7 +175,8 @@
         });
       }
 
-      m.ammo -= m.count;
+      if (useFL) m.flashless -= m.count;
+      else { m.ammo -= m.count; flashCaliber = Math.max(flashCaliber, m.gun.caliber); }
       m.ready = false;
       m.reload = (60 / m.gun.rof) * rng.range(0.92, 1.35);
       m.shotsFired += m.count;
@@ -187,6 +194,8 @@
     if (firedAny) {
       ship.salvosFired++;
       ship.lastFireTime = world.time;
+      // 炮口闪光：黑夜里用普通发射药，等于向全场宣布"我在这儿"
+      if (flashCaliber > 0 && world.exposeFlash) world.exposeFlash(ship, flashCaliber);
       world.bus.emit('salvoFired', { ship: ship, range: sol.range });
     }
   }
@@ -226,11 +235,14 @@
     if (!losB.ok) { noteBlocked(world, ship, losB); return; }
     ship.losBlocked = null;
 
+    var flashCaliber = 0;
+
     for (var i = 0; i < ship.mounts.length; i++) {
       var m = ship.mounts[i];
       if (m.disabled || m.destroyed || m.fault || !m.ready) continue;
-      if (m.ammo < m.count) continue;
-      if (dist > m.gun.maxRange) continue;
+      var useFL = ship.flashlessOn && m.flashless >= m.count;
+      if (!useFL && m.ammo < m.count) continue;
+      if (dist > m.gun.maxRange * (useFL ? 0.92 : 1)) continue;
       if (!ship.mountArcOk(m, rel)) continue;
 
       var want = (m.arc === 'aft') ? U.angDiff(rel, 180) + 180 : U.angDiff(rel, 0);
@@ -259,7 +271,8 @@
         });
       }
 
-      m.ammo -= m.count;
+      if (useFL) m.flashless -= m.count;
+      else { m.ammo -= m.count; flashCaliber = Math.max(flashCaliber, m.gun.caliber); }
       m.ready = false;
       m.reload = (60 / m.gun.rof) * 1.8 * rng.range(0.92, 1.35);
       m.shotsFired += m.count;
@@ -269,6 +282,8 @@
     if (firedAny) {
       ship.salvosFired++;
       ship.lastFireTime = world.time;
+      // 岸轰的火光更大：整条战列线一起亮，岸上的观察哨看得一清二楚
+      if (flashCaliber > 0 && world.exposeFlash) world.exposeFlash(ship, flashCaliber + 30);
       world.bus.emit('salvoFired', { ship: ship, range: dist });
     }
   }
@@ -658,8 +673,9 @@
     mount.loaded -= fired;
     mount.salvoesFired++;
     ship.torpsFired += fired;
-    if (mount.loaded <= 0) { mount.reload = mount.reloadTime; mount.loaded = 0; }
-    else mount.reload = mount.reloadTime;
+    // 只有还有备用雷才排装填；一条都没有就永远空着
+    if (mount.loaded < mount.tubes && (mount.reserve || 0) > 0) mount.reload = mount.reloadTime;
+    else if (mount.loaded <= 0) mount.reload = 0;
 
     world.bus.emit('torpedoLaunch', { ship: ship, count: fired });
     return fired;

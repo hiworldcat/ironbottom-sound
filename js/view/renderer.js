@@ -607,10 +607,12 @@
 
       var age = tr.age != null ? tr.age : world.time - tr.lastSeen;
       var stale = age > 45;
-      var identified = tr.idLevel >= N.Sensors.ID.TYPE && !tr.esmOnly;
+      var identified = tr.idLevel >= N.Sensors.ID.TYPE && !tr.esmOnly && !tr.fromFlash;
       // 电探只能测向：紫色，且画一条方位线出来
       var esm = !!tr.esmOnly;
-      var col = esm ? '#d9a6ff' : (identified ? COL.contactId : COL.contact);
+      // 炮口闪光：不是一条船，是"那边有人在开炮"，暖橙色
+      var flash = !!tr.fromFlash;
+      var col = esm ? '#d9a6ff' : (flash ? '#ffb060' : (identified ? COL.contactId : COL.contact));
       var alpha = stale ? 0.45 : 1.0;
       var unc = Math.max(14, tr.uncertainty * cam.zoom);
       var selected = ui.selectedTrackId === tr.id;
@@ -679,8 +681,8 @@
         ctx.restore();
       }
 
-      // 航向箭头（电探没有航向，别画）
-      if (tr.speed > 1 && !esm) {
+      // 航向箭头（电探和闪光都没有航向，别画）
+      if (tr.speed > 1 && !esm && !flash) {
         var hv = Geo.headingVec(tr.course);
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
@@ -692,6 +694,7 @@
 
       // 标签
       var label = esm ? '雷达辐射源' : N.Sensors.idText(tr);
+      if (flash) label = '炮口闪光';
       var dist = V.dist(world.playerReference(), tr.pos);
       var errTxt = tr.uncertainty >= 1000
         ? '±' + (tr.uncertainty / 1000).toFixed(1) + 'km'
@@ -708,8 +711,8 @@
       ctx.fillText(label, s.x + unc + 6, s.y - 7);
       ctx.fillStyle = esm ? 'rgba(217,166,255,0.72)' : 'rgba(255,193,92,0.65)';
       ctx.font = '10px "Consolas", monospace';
-      ctx.fillText((esm ? '仅方位  ' : U.fmtRange(dist) + '  ') +
-        (esm ? '' : Math.round(tr.course) + '° / ' + tr.speed.toFixed(0) + 'kn  ') +
+      ctx.fillText(((esm || flash) ? '仅方位  ' : U.fmtRange(dist) + '  ') +
+        ((esm || flash) ? '' : Math.round(tr.course) + '° / ' + tr.speed.toFixed(0) + 'kn  ') +
         errTxt + (age >= 5 ? '  ' + Math.round(age) + 's前' : '') +
         (stale ? '  (陈旧)' : ''), s.x + unc + 6, s.y + 7);
 

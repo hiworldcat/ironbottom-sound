@@ -137,11 +137,28 @@
         reload: 0,
         ready: true,
         disabled: false,
-        ammo: m.count * 160,     // 每门炮备弹约 160 发
+        // 备弹按史实：8 英寸 135 发/门、6 英寸 200、5 英寸 350、
+        // 20 cm 120、14 cm 150、12.7 cm 200。
+        // 一场夜战打不完，但连打四十分钟、或者对着岸上猛轰，是会打光的。
+        ammo: m.count * (g.rpg || 160),
+        flashless: 0,            // 消焰（无烟）发射药，单独一份，打光就回到普通弹
         shotsFired: 0,
         trainRate: g.caliber >= 200 ? 5 : (g.caliber >= 150 ? 7 : 10)
       };
     });
+
+    /* ---- 消焰发射药（无烟弹） ----
+       史实：美国海军到 1943 年年中才把消焰发射药发到太平洋舰队，第一次
+       大规模使用是在韦拉湾（1943-08-06）—— 那场夜战日方全程没看见美军
+       开炮的位置。日方始终没解决这个问题。
+       代价：初速略低，最大射程打九二折、散布略大。 */
+    this.flashlessOn = false;
+    if (cls.flashless && world && world.flashlessAllowed) {
+      for (var fi = 0; fi < this.mounts.length; fi++) {
+        var fm = this.mounts[fi];
+        fm.flashless = Math.floor(fm.ammo * cls.flashless);
+      }
+    }
 
     /* ---- 鱼雷发射管 ---- */
     var self = this;
@@ -154,6 +171,7 @@
         torp: td,
         tubes: t.tubes,
         loaded: t.tubes,
+        reserve: t.reserve || 0,   // 备用雷：日舰带一套，美军一条都没有
         reload: 0,
         reloadTime: t.reload,
         localX: t.pos * cls.length / 2,
@@ -738,9 +756,15 @@
     for (var i = 0; i < this.torps.length; i++) {
       var t = this.torps[i];
       if (t.disabled || t.destroyed || t.fault) continue;
-      if (t.loaded < t.tubes) {
+      // 备用雷打完了就再也装不上 —— 鱼雷不是无限供应的
+      if (t.loaded < t.tubes && t.reserve > 0) {
         t.reload -= dt * tRate;
-        if (t.reload <= 0) { t.loaded = t.tubes; t.reload = 0; }
+        if (t.reload <= 0) {
+          var take = Math.min(t.tubes - t.loaded, t.reserve);
+          t.loaded += take;
+          t.reserve -= take;
+          t.reload = 0;
+        }
       }
     }
   };
@@ -759,6 +783,29 @@
     }
     var g = total > 0 ? (0.35 + 0.65 * guns / total) : 1;
     return this.cls.combatPower * (0.15 + 0.85 * h) * (0.55 + 0.45 * s) * f * g;
+  };
+
+  /** 还剩多少条鱼雷（管内 + 备用） */
+  Ship.prototype.torpedoesLeft = function () {
+    var n = 0;
+    for (var i = 0; i < this.torps.length; i++) {
+      n += (this.torps[i].loaded || 0) + (this.torps[i].reserve || 0);
+    }
+    return n;
+  };
+
+  /** 还剩多少发消焰弹（各炮塔合计） */
+  Ship.prototype.flashlessLeft = function () {
+    var n = 0;
+    for (var i = 0; i < this.mounts.length; i++) n += (this.mounts[i].flashless || 0);
+    return n;
+  };
+
+  /** 主炮弹药还剩多少 */
+  Ship.prototype.shellsLeft = function () {
+    var n = 0;
+    for (var i = 0; i < this.mounts.length; i++) n += (this.mounts[i].ammo || 0);
+    return n;
   };
 
   /** 给玩家看的损管摘要 */

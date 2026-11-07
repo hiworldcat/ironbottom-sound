@@ -450,6 +450,7 @@
           countKnown: tr.countKnown !== false,
           phantom: !!tr.phantom,
           fromPlane: tr.fromPlane || null,
+          fromFlash: !!tr.fromFlash,
           errR: tr.errR, errC: tr.errC, axis: tr.axis,
           observedAt: fx.t
         });
@@ -574,11 +575,24 @@
       var pic = world.tracks[cmd.side] || (world.tracks[cmd.side] = {});
       for (var i = 0; i < p.obs.length; i++) {
         var o = p.obs[i];
-        var tr = pic[o.id];
+        var key = o.id;
+        /* 炮口闪光：几个瞭望哨看见的是同一团火，图上只能算一条。
+           找一条位置相近、还在闪的并上去，否则八条舰各自报一条，
+           同一片海面上会冒出十几个"闪光"。 */
+        if (o.fromFlash) {
+          var gate = Math.max(3000, (o.posErr || 2000) * 1.6);
+          for (var fq in pic) {
+            var ex = pic[fq];
+            if (!ex.fromFlash) continue;
+            if (world.time - (ex.observedAt || 0) > 45) continue;
+            if (V.dist(ex.pos, o.pos) < gate) { key = fq; break; }
+          }
+        }
+        var tr = pic[key];
 
         if (!tr) {
-          tr = pic[o.id] = {
-            id: o.id, side: cmd.side,
+          tr = pic[key] = {
+            id: key, side: cmd.side,
             pos: { x: o.pos.x, y: o.pos.y },
             course: o.course, speed: o.speed,
             uncertainty: o.posErr || o.uncertainty || 400,
@@ -589,9 +603,10 @@
             seenBy: p.from, fixes: [], seenThisTick: false,
             source: o.source, observedAt: o.observedAt, reportedAt: world.time,
             via: p.fromName, iff: 'unknown',
-            members: o.members || [o.id], count: o.count || 1,
+            members: o.members || [key], count: o.count || 1,
             countKnown: o.countKnown !== false, phantom: !!o.phantom,
             fromPlane: o.fromPlane || null,
+            fromFlash: !!o.fromFlash,
             contributors: {}, latency: 0, esmOnly: !!o.esmOnly, bestErr: 1e9
           };
         }
@@ -602,6 +617,7 @@
         if (o.countKnown != null) tr.countKnown = !!o.countKnown;
         if (o.phantom) tr.phantom = true;
         if (o.fromPlane) tr.fromPlane = o.fromPlane;
+        if (o.fromFlash) tr.fromFlash = true;
         if (o.errR) { tr.errR = o.errR; tr.errC = o.errC; tr.axis = o.axis; }
 
         /* ---- 这份报告在路上走了多久 ---- */
@@ -716,6 +732,11 @@
     if (world.time - (cmd.lastPrune || 0) > 5) {
       cmd.lastPrune = world.time;
       for (var k2 in pic) {
+        // 炮口闪光是一次一闪的事件，停火一分钟就从图上撤掉
+        if (pic[k2].fromFlash && world.time - (pic[k2].observedAt || 0) > 75) {
+          delete pic[k2];
+          continue;
+        }
         if (world.time - (pic[k2].observedAt || 0) > 300) delete pic[k2];
       }
     }

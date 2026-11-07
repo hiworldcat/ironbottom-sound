@@ -107,6 +107,9 @@
       }
     }
 
+    /* 消焰发射药：1943 年 7 月起美军才有（韦拉湾是第一次大规模使用） */
+    this.flashlessAllowed = flashlessAllowed(scenario);
+
     /* 建舰 */
     var self = this;
     (scenario.forces || []).forEach(function (f) {
@@ -520,6 +523,9 @@
     for (var side in this.tracks) {
       var tracks = this.tracks[side];
       for (var id in tracks) {
+        /* 炮口闪光本来就不对应任何一条已知的船（它是"那边有人在开炮"），
+           不能按"这条船沉了"处理 —— 否则一过 20 秒就自己消失了。 */
+        if (tracks[id].fromFlash) continue;
         var s = this.shipById(id);
         if (!s || s.sunk) {
           var tr = tracks[id];
@@ -854,6 +860,74 @@
     if (p.length === 0) return { x: 0, y: 0 };
     var flag = p.filter(function (s) { return s.role === 'flagship'; })[0];
     return (flag || p[0]).pos;
+  };
+
+  /**
+   * 这个剧本的年代，美军有没有消焰（无烟）发射药。
+   * 史实：1943 年年中才发到太平洋舰队，之前夜战里美军一开炮就是一团火光。
+   */
+  function flashlessAllowed(scenario) {
+    var d = scenario && scenario.date;
+    if (!d) return false;
+    var m = /(\d{4})\s*年\s*(\d{1,2})\s*月/.exec(String(d));
+    if (!m) return false;
+    var y = parseInt(m[1], 10), mo = parseInt(m[2], 10);
+    return (y > 1943) || (y === 1943 && mo >= 7);
+  }
+
+  /* -------------------------------------------------------------- 炮口闪光 */
+  /** 现在是不是暗的：炮口闪光只有在这种光线下才会暴露位置 */
+  World.prototype.isDark = function () {
+    var l = this.env && this.env.light;
+    return l === 'night' || l === 'dusk' || l === 'dawn';
+  };
+
+  /**
+   * 炮口闪光暴露自己。
+   *
+   * 物理：一次齐射在炮口炸开的是一个几米到十几米的火球。8 英寸炮的黑夜里
+   * 十几公里外都看得见；5 英寸小得多，127 mm 大约 13 km。这个距离跟大气
+   * 透明度关系很大 —— 雨幕、海雾会把光吃掉一半以上。
+   *
+   * 关键在于它**只给出"那个方向有人在开炮"**：
+   *   · 方位还行（点光源，误差一两度）；
+   *   · 距离只能靠"看见闪光"和"听到炮声"的时差去估（声速 340 m/s），
+   *     人耳报时、炮声混杂，误差三成起步；
+   *   · 只有**瞭望哨**能发现，雷达什么也看不见 —— 它不反射电磁波；
+   *   · 看不清是几条船、什么舰种。
+   * 用消焰发射药就没有这团火球，也就没有这条接触。
+   */
+  World.prototype.exposeFlash = function (ship, caliber) {
+    if (!this.isDark()) return 0;
+    if (!ship || ship.sunk || ship.sinking || !ship.alive) return 0;
+    // 一次齐射只算一次闪光（同一次交火里几座炮塔差不多同时响）
+    if (this.time - (ship._lastFlashAt || -999) < 2.0) return 0;
+    ship._lastFlashAt = this.time;
+
+    var foe = ship.side === 'US' ? 'JP' : 'US';
+    var base = 6000 + caliber * 55;          // 203 mm ≈ 17.2 km，127 mm ≈ 13.0 km
+    var vis = (this.weather && this.weather.visibility) || 12000;
+    var reach = base * U.clamp(vis / 9000, 0.45, 1.25);
+    if (ship.fire > 3) reach *= 1.15;        // 自己已经烧起来了，反正看得见
+
+    var seen = 0;
+    for (var i = 0; i < this.ships.length; i++) {
+      var o = this.ships[i];
+      if (o.side !== foe || o.sunk || o.sinking || !o.alive) continue;
+      var d = V.dist(o.pos, ship.pos);
+      if (d > reach) continue;
+      // 观察者自己躲在烟幕里，或者中间隔着别人烧起来的烟
+      if (N.Sensors && N.Sensors.inSmoke(this, o.pos)) continue;
+      if (N.Sensors && N.Sensors.flashReport) {
+        if (N.Sensors.flashReport(this, o, ship, d)) seen++;
+      }
+    }
+    if (seen > 0 && this.time - (ship._flashLogAt || -999) > 60) {
+      ship._flashLogAt = this.time;
+      this.log(ship.side, '⚠ ' + ship.name + ' 的炮口闪光暴露了位置（' +
+        Math.round(reach / 1000) + ' km 内的瞭望哨看见了）', 'warn');
+    }
+    return seen;
   };
 
   /* ------------------------------------------------------------------ 胜负 */

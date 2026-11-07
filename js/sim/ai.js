@@ -111,6 +111,9 @@
       /* 假回波：海杂波和二次回波也会在屏幕上留一个亮点。舰上的人不会
          拿一个没有航向、忽大忽小的点当目标，AI 也不该去追。 */
       if (tr.phantom) continue;
+      /* 炮口闪光：知道"那边有人在开炮"，但那是一个事件，不是一个能瞄准的目标。
+         拿它当目标只会把炮弹打进空海面 —— AI 不干这种亏本买卖。 */
+      if (tr.fromFlash) continue;
       var sc = targetScore(world, ship, tr);
       if (sc > bestScore) { bestScore = sc; best = tr; }
     }
@@ -236,6 +239,7 @@
     var best = null, bestD = maxDist;
     for (var i = 0; i < list.length; i++) {
       if (list[i].phantom) continue;
+  if (list[i].fromFlash) continue;   // 闪光不是船，不能当射击目标
       var d = V.dist(ship.pos, list[i].pos);
       if (d < bestD) { bestD = d; best = list[i]; }
     }
@@ -341,6 +345,9 @@
     if (!holding && ai.torpCooldown <= world.time && !ship.ffTrack &&
       torpedoWindowOpen(world, ship, track)) {
       var trng = ship.torpRangeMax * doc.torpFrac;
+      /* 鱼雷是有限的：阳炎级一共 16 条，四条一次就只能放四轮。
+         只剩最后几条的时候不再远距离撒 —— 近了再打，一条当一条用。 */
+      if (ship.torpedoesLeft && ship.torpedoesLeft() <= 4) trng *= 0.7;
       var rel = Math.abs(U.angDiff(brg, ship.heading));
       if (range < trng && rel > 40 && rel < 140) {
         // 距离越远，扇面越宽 —— 远了目标跑得出散布
@@ -436,6 +443,15 @@
     var rng = world.rng;
     var T = (N.Tactics && N.Tactics.ROLE) || {};
     var role = (ship.aiTask && ship.aiTask.role) || null;
+
+    /* ---------- 消焰发射药 ----------
+       夜里有就用：这个距离上对方本来就看不见你，唯一会暴露位置的是
+       炮口那团火球。代价是射程打九二折、散布略大，所以只在天黑时开。
+       备用弹有限（约占主炮弹药的三分之一），打光了自动回到普通弹。 */
+    if (ship.flashlessLeft) {
+      ship.flashlessOn = ship.flashlessLeft() > 0 && world.isDark &&
+        world.isDark() && (world.weather.visibility || 12000) < 11000;
+    }
 
     /* ---------- 运输船：只负责开到目的地 ---------- */
     if (ship.cls.type === 'AK' || ship.role === 'transport') {

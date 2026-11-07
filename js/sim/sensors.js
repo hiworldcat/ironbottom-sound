@@ -17,6 +17,8 @@
 
   var U = N.U, V = N.V, Geo = N.Geo;
 
+  var _flashSeq = 0;   // 闪光航迹的编号（不暴露对方是哪条船）
+
   var ID = {
     NONE: 0,        // 无接触
     SURFACE: 1,     // 水面目标（有东西，不知是什么）
@@ -482,6 +484,7 @@
           countKnown: echo.countKnown,
           phantom: !!echo.phantom,
           fromPlane: echo.fromPlane || null,
+          fromFlash: !!echo.fromFlash,
           lastSeen: world.time,
           firstSeen: world.time,
           seenBy: observer ? observer.id : null,
@@ -502,6 +505,7 @@
       tr.phantom = !!echo.phantom;
       if (echo.fromPlane) tr.fromPlane = echo.fromPlane;
       else if (!tr.fromPlane) tr.fromPlane = null;
+      if (echo.fromFlash) tr.fromFlash = true;
 
       /* ---- 电探只是方位：已经有更好的定位时，别让它把位置拽偏 ----
        * 电探的"位置"是沿方位线猜出来的，误差几公里。如果本舰已经有
@@ -544,6 +548,8 @@
       }
 
       // ---- 由连续定位推算航向航速（带噪声） ----
+      // 闪光航迹没有航向：那是"有人在那边开炮"，不是一条正在走的船
+      if (tr.fromFlash) return tr;
       tr.fixes.push({ t: world.time, x: tr.pos.x, y: tr.pos.y });
       if (tr.fixes.length > 6) tr.fixes.shift();
       if (tr.fixes.length >= 2) {
@@ -565,6 +571,8 @@
       if (!tr) return null;
       tr.seenThisTick = false;
       var gap = world.time - tr.lastSeen;
+      // 闪光是一次一闪的事件：停火一分钟，这条接触就该从图上消失
+      if (tr.fromFlash && gap > 60) { delete map[key]; return null; }
       if (gap > 900 || (tr.phantom && gap > 26)) { delete map[key]; return null; }
       if (tr.fix) {
         var v = Geo.headingVec(tr.course);
@@ -583,6 +591,59 @@
         tr.errC = tr.uncertainty;
       }
       return tr;
+    },
+
+    /**
+     * 炮口闪光报告：只有瞭望哨能看见，测向还行、测距很糟。
+     *
+     * 它不是"看见了一条船"，而是"那个方向有人在开炮"。所以：
+     *   · 识别等级只到「水面目标」，数不清几条、也分不出舰种；
+     *   · 距离靠闪光—炮声时差估（声速 340 m/s），误差三成；
+     *   · 航向航速一概没有 —— 图上就是一个大圈。
+     */
+    flashReport: function (world, observer, target, dist) {
+      var rng = world.rng;
+      var brg = Geo.bearing(observer.pos, target.pos);
+      var brgErr = 1.6;                                   // 度：点光源，方位看得还算准
+      var rEst = Math.max(900, dist * (1 + rng.dev(0.30)));
+      var pos = Geo.dest(observer.pos, U.norm360(brg + rng.dev(brgErr)), rEst);
+      var errR = Math.max(700, rEst * 0.30);              // 沿视线：时差估距，三成
+      var errC = Math.max(300, rEst * Math.tan(brgErr * U.DEG));
+      if (!observer.ownTracks) observer.ownTracks = {};
+
+      /* 同一片海域里还在闪的，归到同一条航迹上：
+         瞭望哨会说"还是那家伙在打"，而不是每打一发就多出一个目标。
+         归并门限要跟着距离走 —— 10 km 外估出来的位置本身就有三公里误差，
+         拿一个固定的小半径去比，同一条舰每一轮齐射都会变成一个新目标。 */
+      var gate = Math.max(2600, rEst * 0.45);
+      var key = null, oldest = null, oldestT = 1e9;
+      for (var k in observer.ownTracks) {
+        var t0 = observer.ownTracks[k];
+        if (!t0.fromFlash) continue;
+        var age0 = world.time - t0.lastSeen;
+        if (age0 > 50) continue;
+        if (V.dist(t0.pos, pos) < gate) { key = k; break; }
+        if (age0 < oldestT) { oldestT = age0; oldest = k; }
+      }
+      /* 同时在闪的目标太多，图就没法看了。超过 14 条就把最旧的顶掉。 */
+      if (!key) {
+        var nFlash = 0;
+        for (var k2 in observer.ownTracks) {
+          if (observer.ownTracks[k2].fromFlash) nFlash++;
+        }
+        if (nFlash >= 14 && oldest) key = oldest;
+      }
+      if (!key) key = 'F' + (++_flashSeq);
+
+      return Sensors.fuse(world, observer.ownTracks, {
+        key: key,
+        pos: pos, posErr: Math.max(errR, errC),
+        errR: errR, errC: errC, axis: brg,
+        idLevel: ID.SURFACE,
+        members: [key], count: 1, countKnown: false,
+        phantom: false, source: 'flash', esmOnly: false, fromFlash: true,
+        tgt: null
+      }, 0, observer.side, observer);
     },
 
     /**
@@ -617,6 +678,7 @@
       if (!tr) return '无接触';
       // 雷达上的一坨：不知道几条船，也分不出舰种
       if (tr.phantom) return '雷达接触 · 疑似假回波';
+      if (tr.fromFlash) return '炮口闪光 · 仅方位';
       if (tr.source === 'floatplane') {
         return '水侦情报 · ' + (tr.count || 1) + ' 艘（坐标不准）';
       }

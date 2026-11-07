@@ -19,42 +19,42 @@
   N.Guns = {
     '8in55': {
       id: '8in55', name: '8"/55 Mk 12', caliber: 203, shellWeight: 152,
-      mv: 853, maxRange: 27400, rof: 3.2, dispersion: 1.05,
+      mv: 853, maxRange: 27400, rof: 3.2, dispersion: 1.05, rpg: 135,
       pen: [[0, 254], [5000, 193], [10000, 142], [15000, 104], [20000, 74], [25000, 50]],
       deckPen: [[0, 8], [5000, 16], [10000, 28], [15000, 45], [20000, 64], [25000, 85]],
       maxDescent: 42, shell: 'AP'
     },
     '6in47': {
       id: '6in47', name: '6"/47 Mk 16', caliber: 152, shellWeight: 59,
-      mv: 812, maxRange: 23800, rof: 8.0, dispersion: 1.30,
+      mv: 812, maxRange: 23800, rof: 8.0, dispersion: 1.30, rpg: 200,
       pen: [[0, 200], [5000, 143], [10000, 95], [15000, 58], [20000, 30]],
       deckPen: [[0, 6], [5000, 12], [10000, 22], [15000, 36], [20000, 52]],
       maxDescent: 38, shell: 'AP'
     },
     '5in38': {
       id: '5in38', name: '5"/38 Mk 12', caliber: 127, shellWeight: 25,
-      mv: 792, maxRange: 16600, rof: 12.0, dispersion: 1.60,
+      mv: 792, maxRange: 16600, rof: 12.0, dispersion: 1.60, rpg: 350,
       pen: [[0, 125], [5000, 76], [10000, 40], [15000, 21]],
       deckPen: [[0, 5], [5000, 10], [10000, 20], [15000, 31]],
       maxDescent: 35, shell: 'AP'
     },
     '20cm50': {
       id: '20cm50', name: '三年式 20cm/50', caliber: 200, shellWeight: 125.85,
-      mv: 835, maxRange: 27400, rof: 2.8, dispersion: 1.10,
+      mv: 835, maxRange: 27400, rof: 2.8, dispersion: 1.10, rpg: 120,
       pen: [[0, 250], [5000, 185], [10000, 135], [15000, 97], [20000, 68], [25000, 46]],
       deckPen: [[0, 8], [5000, 16], [10000, 29], [15000, 46], [20000, 66], [25000, 88]],
       maxDescent: 43, shell: 'AP'
     },
     '14cm50': {
       id: '14cm50', name: '五十口径 14cm', caliber: 140, shellWeight: 38,
-      mv: 855, maxRange: 20000, rof: 5.5, dispersion: 1.40,
+      mv: 855, maxRange: 20000, rof: 5.5, dispersion: 1.40, rpg: 150,
       pen: [[0, 150], [5000, 106], [10000, 68], [15000, 40]],
       deckPen: [[0, 5], [5000, 10], [10000, 19], [15000, 30]],
       maxDescent: 36, shell: 'AP'
     },
     '127mm50': {
       id: '127mm50', name: '五十口径 12.7cm', caliber: 127, shellWeight: 23,
-      mv: 915, maxRange: 18400, rof: 6.0, dispersion: 1.70,
+      mv: 915, maxRange: 18400, rof: 6.0, dispersion: 1.70, rpg: 200,
       pen: [[0, 110], [5000, 72], [10000, 38], [15000, 20]],
       deckPen: [[0, 4], [5000, 9], [10000, 18], [15000, 29]],
       maxDescent: 37, shell: 'AP'
@@ -92,6 +92,8 @@
 
     'neworleans': {
       id: 'neworleans', name: '新奥尔良级', nameEn: 'New Orleans class',
+      // 消焰（无烟）发射药：1943 年年中才发到太平洋舰队，只占主炮弹药的一小部分
+      flashless: 0.35,
       nation: 'US', type: 'CA', typeName: '重巡洋舰',
       displacement: 12700, length: 179.5, beam: 18.8, draft: 6.2,
       maxSpeed: 32.7, cruiseSpeed: 15, accel: 0.09, decel: 0.16,
@@ -104,8 +106,8 @@
         { label: 'X', pos: -0.62, count: 3, gun: '8in55', arc: 'aft', armor: 203 }
       ],
       torps: [
-        { label: '1', pos: 0.10, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' },
-        { label: '2', pos: -0.18, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' }
+        { label: '1', pos: 0.10, tubes: 4, torp: 'mk15', reload: 240, reserve: 0, arc: 'broadside' },
+        { label: '2', pos: -0.18, tubes: 4, torp: 'mk15', reload: 240, reserve: 0, arc: 'broadside' }
       ],
       radar: { name: 'SG 对海雷达', range: 26000, bearingErr: 2.2, rangeErr: 85,
         rangeRes: 230, bearingRes: 2.6 },
@@ -116,6 +118,8 @@
 
     'brooklyn': {
       id: 'brooklyn', name: '布鲁克林级', nameEn: 'Brooklyn class',
+      // 消焰（无烟）发射药：1943 年年中才发到太平洋舰队，只占主炮弹药的一小部分
+      flashless: 0.35,
       nation: 'US', type: 'CL', typeName: '轻巡洋舰',
       displacement: 10000, length: 185.4, beam: 18.8, draft: 6.0,
       maxSpeed: 33.5, cruiseSpeed: 15, accel: 0.10, decel: 0.18,
@@ -130,8 +134,8 @@
         { label: 'Y', pos: -0.74, count: 3, gun: '6in47', arc: 'aft', armor: 165 }
       ],
       torps: [
-        { label: '1', pos: 0.05, tubes: 5, torp: 'mk15', reload: 260, arc: 'broadside' },
-        { label: '2', pos: -0.12, tubes: 5, torp: 'mk15', reload: 260, arc: 'broadside' }
+        { label: '1', pos: 0.05, tubes: 5, torp: 'mk15', reload: 260, reserve: 0, arc: 'broadside' },
+        { label: '2', pos: -0.12, tubes: 5, torp: 'mk15', reload: 260, reserve: 0, arc: 'broadside' }
       ],
       radar: { name: 'SG 对海雷达', range: 25000, bearingErr: 2.6, rangeErr: 95,
         rangeRes: 280, bearingRes: 3.0 },
@@ -142,6 +146,8 @@
 
     'cleveland': {
       id: 'cleveland', name: '克利夫兰级', nameEn: 'Cleveland class',
+      // 消焰（无烟）发射药：1943 年年中才发到太平洋舰队，只占主炮弹药的一小部分
+      flashless: 0.35,
       nation: 'US', type: 'CL', typeName: '轻巡洋舰',
       displacement: 11744, length: 185.4, beam: 18.8, draft: 6.0,
       maxSpeed: 32.5, cruiseSpeed: 15, accel: 0.10, decel: 0.18,
@@ -165,6 +171,8 @@
 
     'fletcher': {
       id: 'fletcher', name: '弗莱彻级', nameEn: 'Fletcher class',
+      // 消焰（无烟）发射药：1943 年年中才发到太平洋舰队，只占主炮弹药的一小部分
+      flashless: 0.35,
       nation: 'US', type: 'DD', typeName: '驱逐舰',
       displacement: 2500, length: 114.8, beam: 12.0, draft: 4.0,
       maxSpeed: 36.5, cruiseSpeed: 15, accel: 0.16, decel: 0.30,
@@ -179,8 +187,8 @@
         { label: '5', pos: -0.82, count: 1, gun: '5in38', arc: 'aft', armor: 13 }
       ],
       torps: [
-        { label: '1', pos: 0.05, tubes: 5, torp: 'mk15', reload: 220, arc: 'broadside' },
-        { label: '2', pos: -0.15, tubes: 5, torp: 'mk15', reload: 220, arc: 'broadside' }
+        { label: '1', pos: 0.05, tubes: 5, torp: 'mk15', reload: 220, reserve: 0, arc: 'broadside' },
+        { label: '2', pos: -0.15, tubes: 5, torp: 'mk15', reload: 220, reserve: 0, arc: 'broadside' }
       ],
       radar: { name: 'SG 对海雷达（桅顶小天线）', range: 22000, bearingErr: 3.4, rangeErr: 120,
         rangeRes: 380, bearingRes: 4.4 },
@@ -190,6 +198,8 @@
 
     'atlanta': {
       id: 'atlanta', name: '亚特兰大级', nameEn: 'Atlanta class',
+      // 消焰（无烟）发射药：1943 年年中才发到太平洋舰队，只占主炮弹药的一小部分
+      flashless: 0.35,
       nation: 'US', type: 'CL', typeName: '轻巡洋舰',
       displacement: 7400, length: 165.0, beam: 16.2, draft: 5.9,
       maxSpeed: 32.5, cruiseSpeed: 15, accel: 0.11, decel: 0.19,
@@ -205,8 +215,8 @@
         { label: 'Z', pos: -0.84, count: 2, gun: '5in38', arc: 'aft', armor: 32 }
       ],
       torps: [
-        { label: '1', pos: 0.06, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' },
-        { label: '2', pos: -0.12, tubes: 4, torp: 'mk15', reload: 240, arc: 'broadside' }
+        { label: '1', pos: 0.06, tubes: 4, torp: 'mk15', reload: 240, reserve: 0, arc: 'broadside' },
+        { label: '2', pos: -0.12, tubes: 4, torp: 'mk15', reload: 240, reserve: 0, arc: 'broadside' }
       ],
       radar: { name: 'SG 对海雷达', range: 24000, bearingErr: 3.0, rangeErr: 105,
         rangeRes: 330, bearingRes: 3.7 },
@@ -250,9 +260,9 @@
         { label: '3', pos: -0.68, count: 2, gun: '127mm50', arc: 'aft', armor: 3 }
       ],
       torps: [
-        { label: '1', pos: 0.04, tubes: 3, torp: 'type93', reload: 240, arc: 'broadside' },
-        { label: '2', pos: -0.14, tubes: 3, torp: 'type93', reload: 240, arc: 'broadside' },
-        { label: '3', pos: -0.30, tubes: 3, torp: 'type93', reload: 240, arc: 'broadside' }
+        { label: '1', pos: 0.04, tubes: 3, torp: 'type93', reload: 240, reserve: 3, arc: 'broadside' },
+        { label: '2', pos: -0.14, tubes: 3, torp: 'type93', reload: 240, reserve: 3, arc: 'broadside' },
+        { label: '3', pos: -0.30, tubes: 3, torp: 'type93', reload: 240, reserve: 3, arc: 'broadside' }
       ],
       radar: null,
       fc: { name: '九四式方位盘（光学）', quality: 0.76, radarAssist: false },
@@ -276,10 +286,10 @@
         { label: '5', pos: -0.76, count: 2, gun: '20cm50', arc: 'aft', armor: 25 }
       ],
       torps: [
-        { label: '1', pos: 0.20, tubes: 3, torp: 'type93', reload: 300, arc: 'broadside' },
-        { label: '2', pos: 0.07, tubes: 3, torp: 'type93', reload: 300, arc: 'broadside' },
-        { label: '3', pos: -0.07, tubes: 3, torp: 'type93', reload: 300, arc: 'broadside' },
-        { label: '4', pos: -0.20, tubes: 3, torp: 'type93', reload: 300, arc: 'broadside' }
+        { label: '1', pos: 0.20, tubes: 3, torp: 'type93', reload: 300, reserve: 3, arc: 'broadside' },
+        { label: '2', pos: 0.07, tubes: 3, torp: 'type93', reload: 300, reserve: 3, arc: 'broadside' },
+        { label: '3', pos: -0.07, tubes: 3, torp: 'type93', reload: 300, reserve: 3, arc: 'broadside' },
+        { label: '4', pos: -0.20, tubes: 3, torp: 'type93', reload: 300, reserve: 3, arc: 'broadside' }
       ],
       radar: null,   // 1942 年日方水面舰艇基本无雷达
       floatplane: { name: '零式水侦', count: 3 },
@@ -305,8 +315,8 @@
         { label: '7', pos: -0.78, count: 1, gun: '14cm50', arc: 'aft', armor: 20 }
       ],
       torps: [
-        { label: '1', pos: 0.00, tubes: 4, torp: 'type93', reload: 280, arc: 'broadside' },
-        { label: '2', pos: -0.18, tubes: 4, torp: 'type93', reload: 280, arc: 'broadside' }
+        { label: '1', pos: 0.00, tubes: 4, torp: 'type93', reload: 280, reserve: 4, arc: 'broadside' },
+        { label: '2', pos: -0.18, tubes: 4, torp: 'type93', reload: 280, reserve: 4, arc: 'broadside' }
       ],
       radar: null,
       floatplane: { name: '九四式水侦', count: 1 },
@@ -328,8 +338,8 @@
         { label: '3', pos: -0.66, count: 2, gun: '127mm50', arc: 'aft', armor: 3 }
       ],
       torps: [
-        { label: '1', pos: 0.06, tubes: 4, torp: 'type93', reload: 240, arc: 'broadside' },
-        { label: '2', pos: -0.20, tubes: 4, torp: 'type93', reload: 240, arc: 'broadside' }
+        { label: '1', pos: 0.06, tubes: 4, torp: 'type93', reload: 240, reserve: 4, arc: 'broadside' },
+        { label: '2', pos: -0.20, tubes: 4, torp: 'type93', reload: 240, reserve: 4, arc: 'broadside' }
       ],
       radar: null,
       fc: { name: '九四式方位盘（光学）', quality: 0.75, radarAssist: false },
@@ -352,8 +362,8 @@
         { label: '5', pos: -0.82, count: 1, gun: '127mm50', arc: 'aft', armor: 3 }
       ],
       torps: [
-        { label: '1', pos: 0.04, tubes: 4, torp: 'type93', reload: 240, arc: 'broadside' },
-        { label: '2', pos: -0.18, tubes: 4, torp: 'type93', reload: 240, arc: 'broadside' }
+        { label: '1', pos: 0.04, tubes: 4, torp: 'type93', reload: 240, reserve: 4, arc: 'broadside' },
+        { label: '2', pos: -0.18, tubes: 4, torp: 'type93', reload: 240, reserve: 4, arc: 'broadside' }
       ],
       radar: null,
       fc: { name: '九四式方位盘（光学）', quality: 0.74, radarAssist: false },

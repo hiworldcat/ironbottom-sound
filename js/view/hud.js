@@ -60,7 +60,7 @@
       dStatus: $('dStatus'),
       dSpeed: $('dSpeed'), dHeading: $('dHeading'), dOrder: $('dOrder'),
       dRelBrg: $('dRelBrg'), dTargetBrg: $('dTargetBrg'), dBombard: $('dBombard'),
-      dStarshell: $('dStarshell'),
+      dStarshell: $('dStarshell'), dFlashless: $('dFlashless'), btnFlashless: $('btnFlashless'),
       hdgDial: $('hdgDial'),
       objectiveList: $('objectiveList'),
       btnStarshell: $('btnStarshell'),
@@ -102,6 +102,9 @@
 
     // 详情面板按钮
     this.el.btnEngage.addEventListener('click', function () { g.toggleEngage(); });
+    if (this.el.btnFlashless) {
+      this.el.btnFlashless.addEventListener('click', function () { g.toggleFlashless(); });
+    }
     this.el.btnTorp.addEventListener('click', function () { g.launchTorpedoes(); });
     this.el.btnSmoke.addEventListener('click', function () { g.toggleSmoke(); });
     if (this.el.btnStarshell) {
@@ -1099,6 +1102,26 @@
       }
     }
 
+    // 无烟弹（消焰发射药）
+    if (this.el.dFlashless) {
+      var fl = ship.flashlessLeft ? ship.flashlessLeft() : 0;
+      var flBtn = this.el.btnFlashless;
+      if (!fl && !ship.flashlessOn) {
+        this.el.dFlashless.textContent = '无配发';
+        this.el.dFlashless.style.color = 'var(--dim)';
+        if (flBtn) { flBtn.classList.add('hidden'); }
+      } else {
+        this.el.dFlashless.textContent = (ship.flashlessOn ? '已装填' : '普通弹') +
+          ' · 余 ' + fl + ' 发';
+        this.el.dFlashless.style.color = ship.flashlessOn ? 'var(--amber)' : 'var(--dim2)';
+        if (flBtn) {
+          flBtn.classList.remove('hidden');
+          flBtn.classList.toggle('active', !!ship.flashlessOn);
+          flBtn.disabled = fl <= 0;
+        }
+      }
+    }
+
     this.el.dFire.textContent = ship.engage ? '开火中' : (ship.bombardTargetId ? '对岸射击' : '停火');
     this.el.dFire.style.color = (ship.engage || ship.bombardTargetId) ? 'var(--red)' : '';
     this.el.btnEngage.classList.toggle('active', !!ship.engage);
@@ -1141,10 +1164,11 @@
         var t = ship.torps[j];
         var tdead = t.disabled || t.destroyed;
         var st2 = tdead ? '损毁' : (t.fault ? '故障' : (t.loaded > 0 ? t.loaded + '/' + t.tubes + ' 待发' :
-          '装填 ' + Math.ceil(t.reload / 60) + '分'));
+          ((t.reserve || 0) > 0 ? '装填 ' + Math.ceil(t.reload / 60) + '分' : '已放空')));
         th += '<div class="mount-row ' + (tdead ? 'disabled' : (t.fault ? 'fault' : (t.loaded > 0 ? 'ready' : 'reloading'))) + '">' +
           '<span class="m-id">' + t.label + '</span>' +
-          '<span class="m-state">' + t.torp.name + ' ' + st2 + '</span></div>';
+          '<span class="m-state">' + t.torp.name + ' ' + st2 + '</span>' +
+          '<span class="m-ammo">' + (t.loaded || 0) + '+' + (t.reserve || 0) + '</span></div>';
       }
       this.el.torpList.innerHTML = th;
 
@@ -1152,11 +1176,14 @@
       var arcOk = tr && ship.torpedoArcOk(ship.relativeBearing(tr.pos));
       var anyLoaded = ship.torps.some(function (t) { return t.loaded > 0 && !t.disabled; });
       this.el.btnTorp.disabled = locked || !tr || !anyLoaded || !arcOk;
-      this.el.torpNote.textContent = !tr ? '未指定目标' :
-        (!anyLoaded ? '发射管装填中' :
-          (!arcOk ? '舷侧未对准目标（需将舷侧转向目标）' :
-            '射程 ' + U.fmtRange(ship.torpRangeMax) + ' · 航速 ' + ship.torpSpeed + ' kn' +
-            (ship.torps[0].torp.wake < 0.2 ? ' · 几乎无航迹' : ' · 航迹明显')));
+      var leftT = ship.torpedoesLeft ? ship.torpedoesLeft() : 0;
+      this.el.torpNote.textContent = (!anyLoaded && leftT <= 0) ? '全舰鱼雷已放空（共 ' + ship.torpsFired + ' 条）' :
+        (!tr ? '未指定目标' :
+          (!anyLoaded ? '发射管装填中 · 全舰余 ' + leftT + ' 条' :
+            (!arcOk ? '舷侧未对准目标（需将舷侧转向目标）' :
+              '射程 ' + U.fmtRange(ship.torpRangeMax) + ' · 航速 ' + ship.torpSpeed + ' kn' +
+              ' · 全舰余 ' + leftT + ' 条' +
+              (ship.torps[0].torp.wake < 0.2 ? ' · 几乎无航迹' : ' · 航迹明显'))));
     }
 
     this.el.btnSmoke.classList.toggle('active', !!ship.smokeScreen);
@@ -1770,6 +1797,23 @@
       '<div class="obj-item"><span class="ob-mark">☀</span><span>所以照明弹是<b>双刃剑</b>：照亮敌人也照亮自己。夜战里谁先开照明弹，往往意味着谁先准备开炮。</span></div>' +
       '<div class="obj-item"><span class="ob-mark">☀</span><span>每艘舰携带有限（重巡 10 / 轻巡 8 / 驱逐舰 5），发射后需 <b>25 秒</b>装填；运输船没有。</span></div>' +
       '<div class="obj-item"><span class="ob-mark">☀</span><span>被照亮的敌舰会更容易被识别（舰种→舰级→舰名），也更容易被跨射校射。</span></div>' +
+      '</div>' +
+      '<p style="margin-top:18px"><b style="color:var(--accent)">炮口闪光与无烟弹</b></p>' +
+      '<div class="obj-list">' +
+      '<div class="obj-item"><span class="ob-mark">✦</span><span>夜里用普通弹开炮，炮口会炸出一团火球：8 英寸炮十几公里外都看得见，5 英寸也有 13 km。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">✦</span><span>看见闪光的<b>只有瞭望哨</b>——雷达对一团火完全无感。图上会出现一条「炮口闪光」接触：<b>只有方位</b>，距离靠闪光与炮声的时差估，误差三成，没有航向航速。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">✦</span><span>这是<b>双向</b>的：日舰开炮，你的瞭望哨一样看得见。谁先开火，谁先暴露。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">✦</span><span>按 <b>N</b>（或点「无烟弹（消焰）」）换成<b>消焰发射药</b>：开炮不再产生闪光。代价是最大射程 <b>×0.92</b>、散布 <b>×1.06</b>。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">✦</span><span>无烟弹只占主炮弹药的 <b>35%</b>，而且<b>只有美军、1943 年 7 月以后</b>才有（史实：韦拉湾海战第一次大规模使用）。打光自动回到普通弹。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">✦</span><span>AI 不会对着一条闪光开炮——那是一个事件，不是一个能瞄准的目标。但<b>你可以</b>，只是炮弹多半落在空海面。</span></div>' +
+      '</div>' +
+      '<p style="margin-top:18px"><b style="color:var(--accent)">弹药是有限的</b></p>' +
+      '<div class="obj-list">' +
+      '<div class="obj-item"><span class="ob-mark">▣</span><span>每门炮的备弹按史实：8 英寸 <b>135</b> 发、6 英寸 <b>200</b>、5 英寸 <b>350</b>、20 cm <b>120</b>、14 cm <b>150</b>、12.7 cm <b>200</b>。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▣</span><span>够打一场，但<b>不是无限</b>：一条重巡理论射速打满 6 分钟就见底。详情面板主炮列表右边那个数字就是每座炮塔还剩多少发。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▣</span><span><b>美军不带备用雷</b>：弗莱彻级全舰只有 <b>10 条</b>，放完就是空的。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▣</span><span><b>日军带一整套备用雷</b>：妙高 <b>24 条</b>、阳炎/白露 <b>16 条</b>、吹雪 18、川内 16。装填 3~5 分钟，备用雷用完后同样放空。</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">▣</span><span>面板上「N+M」＝管里 N 条 + 备用架 M 条；「已放空」就是这条舰再也没雷了。</span></div>' +
       '</div>' +
       '<p style="margin-top:18px"><b style="color:var(--accent)">海图与舰艇照片</b></p>' +
       '<div class="obj-list">' +
