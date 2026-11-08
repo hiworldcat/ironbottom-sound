@@ -76,6 +76,33 @@
       return puffs >= 2 ? 0.32 : 0.58;
     },
 
+    /* 眼高 / 桅顶高度（米）。巡洋舰的雷达天线和瞭望台都在 25~30 米 */
+    EYE_H: 28,
+    TGT_H: 22,
+
+    /**
+     * 这条视线是不是被地形挡住了。结果按（观察者, 目标）缓存 6 秒 ——
+     * 船在这个时间尺度上最多走六十米，地形轮廓根本不会变。
+     */
+    losBlocked: function (world, observer, target, range) {
+      // 注意别和 combat.js 里炮口视线的 ship._los 撞名字，那个是另一个缓存
+      var c = observer._sight || (observer._sight = {});
+      var e = c[target.id];
+      var now = world.time;
+      if (e && now - e.t < 6 &&
+        Math.abs(e.ax - observer.pos.x) < 350 && Math.abs(e.ay - observer.pos.y) < 350 &&
+        Math.abs(e.bx - target.pos.x) < 350 && Math.abs(e.by - target.pos.y) < 350) {
+        return e.isl;
+      }
+      var isl = world.sightBlocked(observer.pos.x, observer.pos.y, Sensors.EYE_H,
+        target.pos.x, target.pos.y, Sensors.TGT_H);
+      c[target.id] = {
+        t: now, ax: observer.pos.x, ay: observer.pos.y,
+        bx: target.pos.x, by: target.pos.y, isl: isl
+      };
+      return isl;
+    },
+
     /**
      * 单个观察者对一个目标的观测。
      * 返回 null 或 { range, bearing, idLevel, source, posErr, brgErr, pos }
@@ -186,6 +213,14 @@
       }
 
       if (!radarOk && !visualOk && !esmOk) return null;
+
+      /* ---------------- 地形遮挡 ----------------
+       *  岛不是一堵墙：只有地面高过视线的那一段才挡得住。
+       *  萨沃（485 米）能把 20 公里外的舰队整个藏起来，图拉吉（100 米）不行。
+       *  雷达同理 —— 电磁波不会拐过山脊。 */
+      if (Sensors.losBlocked(world, observer, target, range)) {
+        return null;
+      }
 
       /* ---------------- 识别等级 ---------------- */
       var idLevel = ID.NONE;

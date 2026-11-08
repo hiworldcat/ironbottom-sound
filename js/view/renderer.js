@@ -338,20 +338,25 @@
       // 比把轮廓按比例缩向重心靠谱得多（真实海岸线是不规则形状）
       ctx.save();
       ctx.clip();
-      var rings = [0.9, 0.75, 0.58, 0.4, 0.24];
-      for (var k = 0; k < rings.length; k++) {
+      /* 等高线按真实海拔来：萨沃 485 米画出来是层层叠叠的锥，图拉吉 100 米
+         就只是一道浅边。这是玩家判断"哪座岛藏得住船"的唯一线索 ——
+         地图上看见的，和模拟里算遮挡的，必须是同一件事。 */
+      var pk = isl[i].peak || 0;
+      var nRing = pk >= 1200 ? 6 : pk >= 500 ? 5 : pk >= 200 ? 3 : pk > 0 ? 2 : 1;
+      for (var k = 0; k < nRing; k++) {
         pathIsland(ctx, poly, cam, W, H);
-        ctx.strokeStyle = 'rgba(140,190,120,' + (0.05 + 0.018 * k) + ')';
-        ctx.lineWidth = Math.max(1, (bb.x1 - bb.x0) * cam.zoom * 0.035 * (k + 1));
+        ctx.strokeStyle = 'rgba(140,190,120,' + (0.045 + 0.022 * (nRing - k)) + ')';
+        ctx.lineWidth = Math.max(1, (bb.x1 - bb.x0) * cam.zoom * 0.03 * (k + 1));
         ctx.stroke();
       }
-      // 山脊高光
+      // 山脊高光：越高的山越亮
+      var ridgeA = U.clamp(pk / 1500, 0.08, 0.36);
       var rg = ctx.createRadialGradient(
         cam.w2s({ x: bb.cx, y: bb.cy }, W, H).x, cam.w2s({ x: bb.cx, y: bb.cy }, W, H).y, 0,
         cam.w2s({ x: bb.cx, y: bb.cy }, W, H).x, cam.w2s({ x: bb.cx, y: bb.cy }, W, H).y,
         Math.max(8, (bb.x1 - bb.x0) * cam.zoom * 0.6)
       );
-      rg.addColorStop(0, 'rgba(96,132,86,0.30)');
+      rg.addColorStop(0, 'rgba(96,132,86,' + ridgeA.toFixed(2) + ')');
       rg.addColorStop(1, 'rgba(96,132,86,0)');
       ctx.fillStyle = rg;
       ctx.fillRect(0, 0, W, H);
@@ -384,6 +389,13 @@
       ctx.fillText(isl[i].label, s.x + 1, s.y + 1);
       ctx.fillStyle = 'rgba(168,214,178,' + (fs > 12 ? 0.72 : 0.55) + ')';
       ctx.fillText(isl[i].label, s.x, s.y);
+      // 山顶标高：拉近了才写，说明这座岛够不够高挡住视线
+      if (isl[i].peak >= 100 && span > 110 && cam.zoom > 0.04) {
+        var pfs = Math.round(U.clamp(span * 0.055, 9, 12));
+        ctx.font = '500 ' + pfs + 'px "Microsoft YaHei", system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(146,190,156,0.46)';
+        ctx.fillText('▲ ' + isl[i].peak + ' m', s.x, s.y + fs * 1.2);
+      }
     }
 
     // 海峡 / 海湾标注

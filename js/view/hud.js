@@ -1942,6 +1942,13 @@
       '<div class="obj-item"><span class="ob-mark">▮</span><span>但<b>烧起来的敌舰看得见</b>：瞭望哨在十几公里外就能认出火光，图上给那条接触挂一簇火苗 + 「火光」。雷达对一团火完全无感，所以只有目视观测才会带这个标记</span></div>' +
       '<div class="obj-item"><span class="ob-mark">▮</span><span>看不见之后火光会变旧，标签写「火光 42s前」—— 它可能已经灭了，也可能还在烧，你自己掂量</span></div>' +
       '<div class="obj-item"><span class="ob-mark">▮</span><span><b>回放里两边都画</b>，而且用的是当时那一帧的状态。拖着时间轴，血条会一段段变短 —— 那艘舰是哪一轮齐射之后哑掉的，看得清清楚楚</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>岛会挡住视线</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>地形有<b>真实海拔</b>：萨沃 485 米、科隆班加拉 1770 米、图拉吉只有 100 米。地图上等高线的圈数和山顶标高就是这个数</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>视线和雷达按一句话判定：<b>这条线上有没有哪一点的地面高过视线</b>。躲在萨沃背后，二十公里外就是一片空白；贴着大岛的浅滩走，桅杆照样露在外面</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>雷达也挡 —— 电磁波不会拐过山脊。所以绕岛接近是有效的，但绕到哪一侧、离岸多远，决定了你什么时候被发现</span></div>' +
+      '<div class="obj-head" style="margin-top:12px"><span>沉没要用眼睛确认</span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>当场看得见，战报才写<b>「◆ 目标沉没」</b></span></div>' +
+      '<div class="obj-item"><span class="ob-mark">·</span><span>看不见的（比如六十公里外被友军打沉），那条接触会停在最后的位置上继续变旧，一分多钟后只报<b>「◇ 失去接触（未确认沉没）」</b> —— 它可能沉了，也可能只是跑掉了</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>R 观看回放（双方真实舰位与机动）· 空格暂停 · 1/2/3/4 时间倍率</span></div>' +

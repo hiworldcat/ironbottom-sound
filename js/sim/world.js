@@ -421,6 +421,105 @@
     return false;
   };
 
+  /* ------------------------------------------------------------------ 地形高度
+   *
+   *  岛不是一堵墙，是一坨有高度的土。
+   *
+   *  以前只要视线扫到陆地就算挡住 —— 一个两平方公里的沙洲和一座 1770 米的
+   *  火山待遇一样。可所罗门群岛的夜战恰恰是绕着"哪座岛够高"打的：萨沃只有
+   *  25 平方公里，却有 485 米的火山锥，能把整支舰队藏住；图拉吉才 100 米，
+   *  从旁边过的时候桅杆都露在外面。
+   *
+   *  所以地形要有个高度场：海岸线是 0，往岛内爬，爬多高看 peak。
+   *  然后视线判定就变成一句话 —— 这条线上有没有哪一点的地面高过视线。
+   * ------------------------------------------------------------------ */
+
+  /** 点到线段距离（米） */
+  function segDist(px, py, ax, ay, bx, by) {
+    var vx = bx - ax, vy = by - ay;
+    var wx = px - ax, wy = py - ay;
+    var L2 = vx * vx + vy * vy;
+    var t = L2 > 0 ? U.clamp01((wx * vx + wy * vy) / L2) : 0;
+    var dx = px - (ax + vx * t), dy = py - (ay + vy * t);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /** 岛内某点到海岸线的最短距离（米）。顶点太多，抽样算，够用 */
+  function edgeDist(is, x, y) {
+    var poly = is.poly, n = poly.length, best = 1e12;
+    var stride = Math.max(1, Math.floor(n / 40));
+    for (var i = 0; i < n; i += stride) {
+      var a = poly[i], b = poly[(i + stride) % n];
+      var d = segDist(x, y, a.x, a.y, b.x, b.y);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  /** 岛在 (x,y) 处的地面高度（米）。海岸 0，往内按 peak 爬 */
+  function heightInIsland(is, x, y) {
+    if (!is.peak) return 0;
+    var d = edgeDist(is, x, y);
+    // 从海岸往里走多远算"内陆"：小岛整座都是坡，大岛才有平缓的内陆
+    var shore = Math.min(1800, 0.35 * Math.sqrt(Math.max(1, is.area) * 1e6));
+    var f = U.clamp01(d / Math.max(300, shore));
+    return is.peak * Math.pow(f, 0.6);
+  }
+
+  /** 某点的地面高度（米），海面是 0 */
+  World.prototype.terrainHeight = function (x, y) {
+    var best = 0;
+    for (var i = 0; i < N.ISLANDS.length; i++) {
+      var is = N.ISLANDS[i];
+      if (!is.peak) continue;
+      var bb = islandBB(is);
+      if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue;
+      if (!Geo.pointInPolygon({ x: x, y: y }, is.poly)) continue;
+      var h = heightInIsland(is, x, y);
+      if (h > best) best = h;
+    }
+    return best;
+  };
+
+  /**
+   * 从 (ax,ay) 眼高 aH 看 (bx,by) 目标高 bH，中间有没有地形挡着。
+   * 挡着就返回那座岛，没挡返回 null。
+   *
+   * 这就是"岛屿遮挡"的全部：沿着视线取一串采样点，哪一点的
+   * 地面高过视线，就看不见了。雷达同理 —— 电磁波不会拐过山脊。
+   */
+  World.prototype.sightBlocked = function (ax, ay, aH, bx, by, bH) {
+    var isl = N.ISLANDS;
+    var x0 = Math.min(ax, bx), x1 = Math.max(ax, bx);
+    var y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+    var cand = null, i, is, bb;
+    for (i = 0; i < isl.length; i++) {
+      is = isl[i];
+      if (!is.peak) continue;
+      bb = islandBB(is);
+      if (x1 < bb.x0 || x0 > bb.x1 || y1 < bb.y0 || y0 > bb.y1) continue;
+      (cand || (cand = [])).push(is);
+    }
+    if (!cand) return null;
+
+    var dist = V.dist({ x: ax, y: ay }, { x: bx, y: by });
+    // 采样间隔 700 米：地形高度场是平滑的锥形，再密也看不出区别
+    var n = Math.round(U.clamp(dist / 700, 4, 24));
+    for (var k = 1; k < n; k++) {
+      var t = k / n;
+      var x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+      var ray = aH + (bH - aH) * t;      // 视线在这一点的海拔
+      for (i = 0; i < cand.length; i++) {
+        is = cand[i];
+        bb = islandBB(is);
+        if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue;
+        if (!Geo.pointInPolygon({ x: x, y: y }, is.poly)) continue;
+        if (heightInIsland(is, x, y) > ray + 3) return is;
+      }
+    }
+    return null;
+  };
+
   /* ------------------------------------------------------------------ 射界遮挡 */
   /**
    * 从 a 到 b 这条直线穿不穿过陆地？穿过就返回挡路的那个岛，没有就返回 null。
@@ -518,21 +617,90 @@
   };
 
   /* ------------------------------------------------------------------ 航迹清理 */
-  /** 目标已沉没：立刻抹掉它的航迹，并报告战果 */
+
+  /**
+   * 这个位置现在还有谁看得见？—— 用来判断"沉没"能不能立刻上报。
+   *
+   * 沉没是要用眼睛确认的。目标在 60 公里外被友军打沉，你手上那条十有八九
+   * 已经是半分钟前的旧航迹，凭什么立刻就知道？看不见，就只算"失去接触"。
+   */
+  World.prototype.wreckVisible = function (ship, side) {
+    var vis = this.weather ? this.weather.visibility : this.env.visibility;
+    var range = vis * N.Sensors.sizeFactor(ship);
+    if (ship.fire > 0) range *= 1.2;            // 烧着的残骸老远就看得见
+    var list = this.shipsOf(side);
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (V.dist(o.pos, ship.pos) > range) continue;
+      if (this.sightBlocked(o.pos.x, o.pos.y, N.Sensors.EYE_H,
+          ship.pos.x, ship.pos.y, 6)) continue;
+      return true;
+    }
+    var planes = this.planes || [];
+    for (var j = 0; j < planes.length; j++) {
+      var p = planes[j];
+      if (p.side !== side || p.down) continue;
+      if (V.dist(p.pos, ship.pos) > range * 1.4) continue;
+      if (this.sightBlocked(p.pos.x, p.pos.y, 600, ship.pos.x, ship.pos.y, 6)) continue;
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * 把某条航迹彻底忘掉 —— 不只是态势图上那一条，还有每条舰自己记的那一份。
+   *
+   * 只删世界航迹是不够的：Command.report 每一轮都会把各舰 ownTracks 里的东西
+   * 重新倒进态势图，删了又长出来，于是"目标沉没"会一秒钟刷十遍。
+   */
+  World.prototype.forgetTrack = function (side, id) {
+    if (this.tracks[side]) delete this.tracks[side][id];
+    delete this._known[id];
+    var list = this.shipsOf(side);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].ownTracks) delete list[i].ownTracks[id];
+    }
+    var planes = this.planes || [];
+    for (var j = 0; j < planes.length; j++) {
+      if (planes[j].side === side && planes[j].ownTracks) delete planes[j].ownTracks[id];
+    }
+  };
+
+  /** 目标已沉没：看得见才算战果，看不见就只算失去接触 */
   World.prototype.pruneTracks = function () {
     for (var side in this.tracks) {
       var tracks = this.tracks[side];
       for (var id in tracks) {
+        var tr = tracks[id];
         /* 炮口闪光本来就不对应任何一条已知的船（它是"那边有人在开炮"），
            不能按"这条船沉了"处理 —— 否则一过 20 秒就自己消失了。 */
-        if (tracks[id].fromFlash) continue;
+        if (tr.fromFlash) continue;
         var s = this.shipById(id);
-        if (!s || s.sunk) {
-          var tr = tracks[id];
-          delete tracks[id];
-          delete this._known[id];
-          if (side === this.playerSide && s) {
-            this.log(side, '◆ 目标沉没：' + (N.Sensors.idText(tr)), 'good');
+        if (!s) {                                  // 这条航迹对应不到任何舰了
+          this.forgetTrack(side, id);
+          continue;
+        }
+        if (!s.sunk) { if (tr._lostAt) delete tr._lostAt; continue; }
+
+        /* 沉了。第一反应是看现在还有没有人看得见那片海 —— */
+        if (!tr._lostAt) {
+          if (this.wreckVisible(s, side)) {
+            this.forgetTrack(side, id);
+            if (side === this.playerSide) {
+              this.log(side, '◆ 目标沉没：' + (N.Sensors.idText(tr)), 'good');
+            }
+            continue;
+          }
+          /* 看不见：这条接触就停在最后的位置上，当它还活着。
+             再等一分多钟，让它在图上自然变旧，然后只报"失去接触"。 */
+          tr._lostAt = this.time;
+          tr.uncertain = true;
+          continue;
+        }
+        if (this.time - tr._lostAt > 80) {
+          this.forgetTrack(side, id);
+          if (side === this.playerSide) {
+            this.log(side, '◇ 失去接触：' + (N.Sensors.idText(tr)) + '（未确认沉没）', 'warn');
           }
         }
       }
@@ -938,7 +1106,19 @@
     if (typeof this.scenario.check === 'function') {
       var r = null;
       try { r = this.scenario.check(this); } catch (e) { r = null; }
-      if (r && r.result) return this.end(r.result, r.reason);
+      if (r && r.result) {
+        /* 时限到了、任务没完成 —— 但如果海面上已经把对手全歼，只写一个"负"
+           太反直觉了（打沉六条日舰，因为炮弹没落在岸上算输）。两件事分开说：
+           任务目标没达成，海战是打赢了的。 */
+        var foe = this.playerSide === 'US' ? 'JP' : 'US';
+        var lim = (this.scenario.victory && this.scenario.victory.timeLimit) || 0;
+        if (r.result === 'loss' && lim && this.time >= lim - 1 &&
+            this.shipsOf(foe).length && !this.aliveShips(foe).length &&
+            this.aliveShips(this.playerSide).length) {
+          return this.end('draw', r.reason + ' 但敌方编队已被全部击沉。');
+        }
+        return this.end(r.result, r.reason);
+      }
       return;
     }
 

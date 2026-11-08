@@ -158,6 +158,9 @@
       label: c.label || '',
       at: c.at || null,
       area: c.area || 0,
+      // 最高点海拔（米）。视线和雷达按这个判遮挡：低矮的礁盘挡不住，
+      // 萨沃那种 485 米的火山才真的能把 20 公里外的舰队藏起来
+      peak: c.peak || 0,
       lonLat: c.lonLat
     };
   });

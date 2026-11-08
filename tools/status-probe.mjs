@@ -407,6 +407,159 @@ console.log("\n[8] 标签顺序：先写「还能不能打」");
   ok(c.texts.some((t) => /^\+\d+$/.test(t)), '标签超过三个 → 出现 +N（' + c.texts.join(" ") + '）');
 }
 
+/* 造一个只有两条船的小世界，位置随便放 */
+function place(usX, usY, jpX, jpY, light) {
+  const sc = {
+    id: 'probe_los', type: 'surface', title: 'probe', subtitle: '',
+    date: '1943 年 8 月 6 日 12:00', startTime: 12 * 3600, timeOfDay: light || 'day',
+    location: '', available: true, tags: [], floatplane: false,
+    env: {
+      visibility: 20000, windDir: 120, windSpeed: 8, seaState: 2, weather: '晴',
+      light: light || 'day', sunAzimuth: 180, rain: 0
+    },
+    playerSide: 'US', brief: [], intel: '',
+    objectives: [], zones: [], shoreTargets: [], forces: [],
+    victory: { timeLimit: 0 }
+  };
+  sc.forces.push({
+    side: 'US', group: 'TF', class: 'neworleans', name: '观察舰', hull: '',
+    x: Math.round(usX), y: Math.round(usY), heading: 90, speed: 0, role: 'flagship'
+  });
+  sc.forces.push({
+    side: 'JP', group: 'IJN', class: 'kagero', name: '目标', hull: '',
+    x: Math.round(jpX), y: Math.round(jpY), heading: 270, speed: 0, role: 'flagship'
+  });
+  return new N.World(sc, { seed: 99 });
+}
+
+console.log("\n[9] 地形遮挡：岛不是一堵墙，要看它多高");
+{
+  const island = (n) => N.ISLANDS.find((i) => i.name === n);
+  ok(N.ISLANDS.every((i) => i.peak > 0), '每个岛都有海拔（' + N.ISLANDS.length + ' 个）');
+  ok(island('萨沃').peak === 485, '萨沃 485 米（火山锥）');
+  ok(island('科隆班加拉').peak > 1700, '科隆班加拉 1770 米');
+  ok(island('图拉吉').peak < 200, '图拉吉只有 100 米');
+
+  // 高度场：中心最高，海岸归零
+  const savo = island('萨沃');
+  const xs = savo.poly.map((p) => p.x), ys = savo.poly.map((p) => p.y);
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+  const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+  const w0 = place(cx, cy, cx, cy + 900);
+  const hC = w0.terrainHeight(cx, cy);
+  const hE = w0.terrainHeight(cx + 2600, cy);
+  ok(hC > 450, '萨沃中心地面 ' + Math.round(hC) + ' 米');
+  ok(hE < 5, '萨沃海岸地面 ' + Math.round(hE) + ' 米（归零）');
+
+  // 隔岛 → 看不见
+  const d = Math.max(...xs) - Math.min(...xs) > 0 ? (Math.max(...xs) - Math.min(...xs)) / 2 + 2500 : 4000;
+  const w1 = place(cx - d, cy, cx + d, cy);
+  const blocked = w1.sightBlocked(cx - d, cy, 28, cx + d, cy, 22);
+  ok(blocked && blocked.name === '萨沃', '隔着萨沃，视线被挡（' + (blocked ? blocked.name : '没挡') + '）');
+  for (let i = 0; i < 40; i++) w1.update(0.1);
+  ok(Object.keys(w1.tracks.US || {}).length === 0, '隔着萨沃，图上一条接触都没有');
+
+  // 开阔水面 → 看得见
+  const w2 = place(OPEN.x, OPEN.y, OPEN.x, OPEN.y - 11000);
+  const clear = w2.sightBlocked(OPEN.x, OPEN.y, 28, OPEN.x, OPEN.y - 11000, 22);
+  ok(!clear, '开阔海面上没有遮挡');
+  for (let i = 0; i < 40; i++) w2.update(0.1);
+  ok(Object.keys(w2.tracks.US || {}).length > 0, '开阔海面 11 km 外能建立接触');
+
+  // 贴着大岛的浅滩走：那里地形高度是 0，不该挡
+  const big = island('瓜达尔卡纳尔');
+  const bx = big.poly.map((p) => p.x), by = big.poly.map((p) => p.y);
+  const bcx = (Math.max(...bx) + Math.min(...bx)) / 2, bcy = (Math.max(...by) + Math.min(...by)) / 2;
+  const w3 = place(bcx - 30000, bcy, bcx + 30000, bcy);
+  ok(w3.terrainHeight(bcx + 2000, bcy) > 0, '瓜岛内陆有高度');
+  const through = w3.sightBlocked(bcx - 30000, bcy, 28, bcx + 30000, bcy, 22);
+  ok(through && through.name === '瓜达尔卡纳尔', '横穿瓜岛被挡');
+}
+
+console.log("\n[10] 沉没要用眼睛确认");
+{
+  const make = () => {
+    const w = place(OPEN.x, OPEN.y, OPEN.x, OPEN.y - 5000, 'night');
+    // 再补一条远处的日舰，免得全灭之后战斗直接结束
+    const sc = w.scenario;
+    sc.forces.push({
+      side: 'JP', group: 'IJN', class: 'kagero', name: '远处的', hull: '',
+      x: Math.round(OPEN.x - 3000), y: Math.round(OPEN.y + 9000), heading: 180, speed: 0, role: 'cruiser'
+    });
+    const w2 = new N.World(sc, { seed: 99 });
+    for (let i = 0; i < 40; i++) w2.update(0.1);
+    return w2;
+  };
+  const msgs = (w, from) => (w.messages || []).slice(from).map((m) => m.text || m);
+
+  // A：远处沉没
+  const wA = make();
+  const far = wA.shipsOf('JP')[0];
+  far.pos.x += 60000;
+  for (let i = 0; i < 300; i++) wA.update(0.1);
+  const nA = (wA.messages || []).length;
+  far.sunk = true; far.alive = false; far.hull = 0;
+  for (let i = 0; i < 20; i++) wA.update(0.1);
+  ok(msgs(wA, nA).every((t) => !/目标沉没/.test(t)), '60 km 外沉没 → 不立刻报战果');
+  for (let i = 0; i < 900; i++) wA.update(0.1);
+  ok(msgs(wA, nA).some((t) => /失去接触/.test(t) && /未确认/.test(t)),
+    '90 秒后只报「失去接触（未确认沉没）」');
+
+  // B：眼前沉没
+  const wB = make();
+  const near = wB.shipsOf('JP')[0];
+  const nB = (wB.messages || []).length;
+  near.sunk = true; near.alive = false; near.hull = 0;
+  for (let i = 0; i < 60; i++) wB.update(0.1);
+  const hits = msgs(wB, nB).filter((t) => /目标沉没/.test(t));
+  ok(hits.length === 1, '5 km 内沉没 → 立刻确认，而且只报一次（' + hits.length + ' 条）');
+}
+
+console.log("\n[11] 全歼对手却任务失败 → 判平局，并写明原因");
+{
+  const build = (sinkAll) => {
+    const sc = {
+      id: 'probe_end', type: 'surface', title: 'probe', subtitle: '',
+      date: '1943 年 8 月 6 日 23:30', startTime: 23 * 3600, timeOfDay: 'night',
+      location: '', available: true, tags: [], floatplane: false,
+      env: {
+        visibility: 14000, windDir: 120, windSpeed: 8, seaState: 2, weather: '晴',
+        light: 'night', sunAzimuth: 0, rain: 0
+      },
+      playerSide: 'US', brief: [], intel: '',
+      objectives: [], zones: [], shoreTargets: [], forces: [],
+      victory: { timeLimit: 100 },
+      check: function (w) {
+        if (w.time >= 100) return { result: 'loss', reason: '炮击没有造成有效破坏。' };
+        return null;
+      }
+    };
+    sc.forces.push({
+      side: 'US', group: 'TF', class: 'brooklyn', name: '海伦娜', hull: '',
+      x: Math.round(OPEN.x), y: Math.round(OPEN.y), heading: 270, speed: 0, role: 'flagship'
+    });
+    sc.forces.push({
+      side: 'JP', group: 'IJN', class: 'kagero', name: '夕立', hull: '',
+      x: Math.round(OPEN.x + 12000), y: Math.round(OPEN.y), heading: 90, speed: 0, role: 'flagship'
+    });
+    const w = new N.World(sc, { seed: 5 });
+    if (sinkAll) {
+      const jp = w.shipsOf('JP')[0];
+      jp.sunk = true; jp.alive = false; jp.hull = 0;
+    }
+    let guard = 0;
+    while (!w.ended && guard++ < 2000) w.update(0.1);
+    return w;
+  };
+
+  const w1 = build(true);
+  ok(w1.ended && w1.result.result === 'draw', '全歼对手 → 平局（实际 ' + (w1.result || {}).result + '）');
+  ok(/全部击沉/.test(w1.result.reason), '结算写明「敌方编队已被全部击沉」：' + w1.result.reason);
+
+  const w2 = build(false);
+  ok(w2.ended && w2.result.result === 'loss', '对手还在 → 仍然是负（实际 ' + (w2.result || {}).result + '）');
+}
+
 console.log("");
 if (bad === 0) console.log("✅ 舰况速览（血条 + 标签）自检全部通过");
 else { console.log("❌ " + bad + " 项失败"); process.exitCode = 1; }
