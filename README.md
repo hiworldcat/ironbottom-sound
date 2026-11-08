@@ -219,9 +219,11 @@
 | ![炮口闪光](screenshots/shot-flash-contact.png) | ![帮助](screenshots/shot-help-flash.png) |
 | 炮口闪光：塔萨法隆加夜战，三条「仅方位」的闪光接触，误差 0.5~3.6 km | 游戏内帮助新增「炮口闪光与无烟弹」「弹药是有限的」 |
 | ![舰况速览](screenshots/shot-ship-status.png) | ![回放里的舰况](screenshots/shot-replay-status.png) |
-| 海图舰况：斯彭斯号五段血条（船体 38% / 上层 0% / 武器 97% / 通讯 11% / 动力 9%），挂「电力·动力·火控」 | 回放里两边都画：拖着时间轴能看到血条一段段变短 |
+| 海图舰况：斯彭斯号五段血条（舰体 57% / 上层 54% / 武器 71% / 通讯 42% / 动力 0%），挂「舵机·动力·电力」 | 回放里两边都画：拖着时间轴能看到血条一段段变短 |
 | ![敌舰火光](screenshots/shot-contact-fire.png) | ![悬浮舰况](screenshots/shot-ship-tooltip.png) |
 | 敌舰起火：瞭望哨看得见，图上标「火光」；雷达看不见 | 鼠标停在舰上：五个分区的百分比 + 全部标签（被 +N 收起的也展开） |
+| ![萨沃岛等高线](screenshots/shot-terrain-los.png) | |
+| 地形有海拔：萨沃只有 25 km²，却是 485 米的火山锥 —— 等高线的圈数、山顶标高都跟着真实高度走，躲到它背后就真的看不见了 | |
 
 ---
 
