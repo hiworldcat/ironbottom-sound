@@ -194,6 +194,23 @@ async function proxy(req, res) {
   }
 }
 
+/* ------------------------------------------------------------------- 模型 */
+
+/**
+ * 问一下这个 key 到底能用哪些模型。启动时打一行日志，
+ * 页面也能通过 /api/models 拿到 —— 想换模型就不用猜名字了。
+ */
+async function listModels() {
+  if (!KEY) return null;
+  try {
+    const r = await fetch(BASE + '/models', { headers: { Authorization: 'Bearer ' + KEY } });
+    const d = await r.json();
+    return (d.data || []).map((m) => m.id);
+  } catch (e) {
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------- 服务 */
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
@@ -204,6 +221,10 @@ const server = http.createServer((req, res) => {
       ok: true, hasKey: !!KEY || MOCK, model: MOCK ? 'mock-admiral' : MODEL,
       base: MOCK ? '(本地假模型)' : BASE, mock: MOCK
     });
+    return;
+  }
+  if (p === '/api/models') {
+    listModels().then((ids) => json(res, 200, { ok: !!ids, models: ids || [], current: MODEL }));
     return;
   }
   if (p === '/api/ds' && req.method === 'POST') {
@@ -222,4 +243,14 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('双 AI 对战：http://127.0.0.1:' + PORT + '/?mode=ds');
   if (MOCK) console.log('模型 本地假模型（DS_MOCK=1，不联网、不花钱）');
   else console.log('模型 ' + MODEL + ' · 密钥 ' + (KEY ? '已设置' : '**缺失**（设 $env:DEEPSEEK_API_KEY 再重启）'));
+
+  if (KEY && !MOCK) {
+    listModels().then((ids) => {
+      if (!ids || !ids.length) { console.log('（没能列出可用模型，检查一下 key 或网络）'); return; }
+      console.log('这个 key 可用的模型：' + ids.join(' / '));
+      if (ids.indexOf(MODEL) < 0) {
+        console.log('注意：' + MODEL + ' 不在列表里，用 DEEPSEEK_MODEL=' + ids[0] + ' 指定一个');
+      }
+    });
+  }
 });

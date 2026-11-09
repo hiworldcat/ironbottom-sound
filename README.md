@@ -2417,6 +2417,8 @@ node tools/ds-bridge.mjs
 链路、面板、指令落地全都能看，只是不带脑子。
 
 可选环境变量：`DEEPSEEK_MODEL`（默认 `deepseek-chat`）、`DS_PORT`（默认 8788）。
+中转启动时会顺手问一下 `/models`，把**这个 key 到底能用哪些模型**打出来 ——
+想换模型不用猜名字，照列表填 `DEEPSEEK_MODEL` 就行。
 
 ### 它看得见什么
 
