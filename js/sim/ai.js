@@ -757,8 +757,12 @@
      * @param {boolean} controlMovement 是否接管运动（敌方=true，友方=false 时只做目标分配）
      */
     update: function (world, dt, side, controlMovement) {
+      /* 这一方交给了外部代理（DeepSeek）就不要再让内置参谋部抢舵 ——
+         参谋部每 6~7 秒重排一次，会把代理下的令全部覆盖掉。 */
+      var external = !!(world.dsControl && world.dsControl[side]);
+
       /* 先让参谋部分工、安排照明弹（它自己会按间隔限流） */
-      if (N.Tactics) {
+      if (N.Tactics && !external) {
         N.Tactics.plan(world, side);
         N.Tactics.illuminate(world, side);
       }
@@ -769,6 +773,20 @@
       for (var i = 0; i < ships.length; i++) {
         var s = ships[i];
         if (s.side !== side || s.sunk || !s.alive) continue;
+
+        /* 外部代理控制的舰：航向航速由代理给，舰长只保留两个本能 ——
+           绕开陆地、躲鱼雷。别的什么都不做。 */
+        if (external) {
+          var extAI = ensureAI(s, world);
+          if (evadeTorpedoes(world, s, extAI)) {
+            s.orderedHeading = avoidLand(world, s, extAI.evadeHeading);
+            s.orderedSpeed = s.effectiveMaxSpeed();
+          } else {
+            s.orderedHeading = avoidLand(world, s, s.orderedHeading);
+          }
+          continue;
+        }
+
         if (s.isPlayerControlled && (!controlMovement || playerSide)) {
           // 玩家控制的舰只：只自动分配目标，不动航向
           var ai = ensureAI(s, world);

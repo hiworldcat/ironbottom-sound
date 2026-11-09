@@ -78,10 +78,21 @@
       if (picked && picked.available) game.scenario = picked;
     }
 
-    if (auto) {
+    /* 双 AI 对战：两边都交给 DeepSeek，默认挑一场两边实力接近的夜战 */
+    var dsMode = /[?&]mode=ds/.test(q);
+    if (dsMode && !sid) {
+      var duel = N.Scenarios.get('savo_melee');
+      if (duel && duel.available) game.scenario = duel;
+    }
+
+    if (auto || dsMode) {
       if (N.Screens) N.Screens.hideTitle();
       startScenario(game.scenario);
       if (m) setTimeScale(parseFloat(m[1]));
+      if (dsMode && N.DsMode) {
+        var iv = /[?&]interval=(\d+)/.exec(q);
+        N.DsMode.start(game, { interval: iv ? parseInt(iv[1], 10) : 6 });
+      }
       if (/[?&]menu=1/.test(q)) {
         var adv = /[?&]advance=(\d+)/.exec(q);
         if (adv) {
@@ -1015,6 +1026,7 @@
       if (k === 't') { game.launchTorpedoes(); return; }
       if (k === 's') { game.toggleSmoke(); return; }
       if (k === 'l') { game.fireStarshell(); return; }
+      if (k === 'i') { if (N.DsMode) N.DsMode.toggle(); return; }
       if (k === 'n') { game.toggleFlashless(); return; }
       if (k === 'g') { game.formSquad(); return; }
       if (k === 'h') { game.toggleSquadTurnMode(); return; }
@@ -1226,6 +1238,9 @@
     }
 
     if (world) {
+      // 双 AI 对战：问两边参谋部、把回话落到舰上
+      if (N.DsMode && N.DsMode.isOn()) N.DsMode.update(dtReal);
+
       // 新手引导：看世界状态判断这一步做到没有
       if (N.Tutorial && N.Tutorial.isActive()) N.Tutorial.update(dtReal);
 

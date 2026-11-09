@@ -22,6 +22,9 @@
     this.weather = null;
     if (N.Weather) N.Weather.init(this, scenario);
     this.autopilot = !!opts.autopilot;   // true 时友方也由 AI 全权驾驶（用于测试/观战）
+    /* 交给外部代理（DeepSeek）接管的阵营：{ US: true, JP: true }
+       设了的阵营，内置参谋部不再抢舵，只保留绕开陆地和躲鱼雷 */
+    this.dsControl = null;
     this.ended = false;
     this.result = null;
     this.tickCount = 0;
