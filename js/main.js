@@ -69,6 +69,7 @@
 
     var q = '';
     try { q = (window.location && window.location.search) || ''; } catch (e) { q = ''; }
+    if (/[?&]legend=0/.test(q)) game.renderer.showLegend = false;
     var auto = /[?&]autostart=1/.test(q);
     game.debug = /[?&]debug=1/.test(q);
     var m = /[?&]speed=(\d+(?:\.\d+)?)/.exec(q);
@@ -1027,6 +1028,11 @@
       if (k === 's') { game.toggleSmoke(); return; }
       if (k === 'l') { game.fireStarshell(); return; }
       if (k === 'i') { if (N.DsMode) N.DsMode.toggle(); return; }
+      if (k === '?') {
+        game.renderer.showLegend = game.renderer.showLegend === false;
+        game.hud.toast(game.renderer.showLegend ? '图例已打开' : '图例已收起');
+        return;
+      }
       if (k === 'n') { game.toggleFlashless(); return; }
       if (k === 'g') { game.formSquad(); return; }
       if (k === 'h') { game.toggleSquadTurnMode(); return; }

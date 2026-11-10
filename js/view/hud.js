@@ -1949,6 +1949,10 @@
       '<div class="obj-head" style="margin-top:12px"><span>沉没要用眼睛确认</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>当场看得见，战报才写<b>「◆ 目标沉没」</b></span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>看不见的（比如六十公里外被友军打沉），那条接触会停在最后的位置上继续变旧，一分多钟后只报<b>「◇ 失去接触（未确认沉没）」</b> —— 它可能沉了，也可能只是跑掉了</span></div>' +
+  '<div class="obj-head" style="margin-top:12px"><span>海图上的字会自己让路</span></div>' +
+  '<div class="obj-item"><span class="ob-mark">·</span><span>舰名分三档：<b>拉近</b>是舰名加航速，<b>中等</b>只有舰名，<b>拉远</b>只剩前两个字，再远就不画 —— 满屏糊在一起的字不如没有</span></div>' +
+  '<div class="obj-item"><span class="ob-mark">·</span><span>标签会互相避让：位置被占了就换一边，四个方向都占满就只留舰名，还挤不下就跳过。先画的先占地方，所以接触优先于己方舰名</span></div>' +
+  '<div class="obj-item"><span class="ob-mark">·</span><span>左下角的<b>图例</b>（按 <b>?</b> 收起，回放里默认不显示）写清了五段血条、十一种故障标签和四种接触符号各是什么意思</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>左键点击敌方接触＝指定为目标；再按 F 开火</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>T 鱼雷齐射（需舷侧对准目标）· S 烟幕 · L 照明弹 · Tab 切换舰艇</span></div>' +
       '<div class="obj-item"><span class="ob-mark">·</span><span>R 观看回放（双方真实舰位与机动）· 空格暂停 · 1/2/3/4 时间倍率</span></div>' +

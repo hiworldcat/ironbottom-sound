@@ -51,6 +51,16 @@
   /* 没电的时候雷达/电台/识别器是一起灭的 —— 那是「电力」的后果，不再单独挂标签 */
   var ELEC_CAUSED = 1 | 2 | 4;
 
+  /* 标签的显示档位：拉远了字比舰还大，就该一层层减。
+     0 = 不画  1 = 只画前两个字  2 = 舰名  3 = 舰名 + 航速 */
+  var TIER_ZOOM = [0.010, 0.022, 0.055];
+  function labelTier(zoom) {
+    if (zoom >= TIER_ZOOM[2]) return 3;
+    if (zoom >= TIER_ZOOM[1]) return 2;
+    if (zoom >= TIER_ZOOM[0]) return 1;
+    return 0;
+  }
+
   /** 在 (sx,sy) 处沿罗经航向 hdg 画一根指针 */
   function needle(ctx, sx, sy, hdg, r, color, w, arrow, dash) {
     var a = (hdg - 90) * DEG;
@@ -159,6 +169,7 @@
     var ctx = this.ctx, W = this.W, H = this.H, cam = ui.camera;
     ctx.save();
     ctx.clearRect(0, 0, W, H);
+    this._labels = [];          // 每帧清一次标签占位，先画的先占地方
 
     this.drawSea(ctx, W, H);
     this.drawGrid(ctx, cam, W, H);
@@ -190,6 +201,7 @@
     this.drawCompass(ctx, world, ui, W, H);
     this.drawScale(ctx, cam, W, H);
     this.drawWind(ctx, world, W, H);
+    this.drawLegend(ctx, world, W, H);
 
     ctx.restore();
   };
@@ -223,6 +235,29 @@
     }
     ctx.closePath();
   }
+
+  /**
+   * 海图真正露在外面的那块矩形。
+   * 左右两块面板（234 / 308）和底部战报（152）是盖在画布上的，
+   * 贴边的刻度尺、罗盘、图例都得往里挪，否则就画在面板底下了。
+   */
+  Renderer.prototype.usable = function () {
+    var W = this.W, H = this.H;
+    var iw = (typeof window !== 'undefined' && window.innerWidth) || W;
+    var left = 234, right = 308, top = 56, bottom = 152;
+    if (iw <= 900) { left = 0; right = 240; bottom = 0; }
+    else if (iw <= 1180) { left = 190; right = 268; }
+    if (W < left + right + 320) {
+      left = Math.min(left, Math.round(W * 0.18));
+      right = Math.min(right, Math.round(W * 0.22));
+    }
+    if (H < top + bottom + 260) bottom = Math.min(bottom, Math.round(H * 0.16));
+    return {
+      x: left, y: top,
+      w: Math.max(240, W - left - right),
+      h: Math.max(180, H - top - bottom)
+    };
+  };
 
   /* -------------------------------------------------------------------- 海面 */
   Renderer.prototype.drawSea = function (ctx, W, H) {
@@ -562,21 +597,56 @@
      哪怕当时瞭望哨根本没看见。放大到一定比例才显示文字，避免糊成一片。 */
   var LABEL_ZOOM = 0.055;
 
-  function drawTag(ctx, x, y, text, color) {
+  /**
+   * 回放里的溯源标注。位置被占了就先往上下挪一挪；
+   * 实在没地方也照样画 —— 少一条"这发是谁打的"比稍微叠一下糟得多。
+   */
+  Renderer.prototype.drawTag = function (ctx, x, y, text, color) {
     ctx.save();
     ctx.font = '10px "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     var w = ctx.measureText(text).width;
+    var bw = w + 7, bh = 14;
+    var bx = x - 2, by = y - 7;
+    var offs = [[0, 0], [0, 15], [0, -15], [0, 30], [0, -30], [bw + 6, 0], [-bw - 6, 0]];
+    for (var i = 0; i < offs.length; i++) {
+      if (this.labelFits(bx + offs[i][0], by + offs[i][1], bw, bh)) {
+        bx += offs[i][0]; by += offs[i][1];
+        break;
+      }
+    }
+    this.reserveLabel(bx, by, bw, bh);
     ctx.fillStyle = 'rgba(6,12,20,0.74)';
-    ctx.fillRect(x - 2, y - 7, w + 7, 14);
+    ctx.fillRect(bx, by, bw, bh);
     ctx.strokeStyle = 'rgba(120,190,220,0.20)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(x - 2.5, y - 7.5, w + 8, 15);
+    ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
     ctx.fillStyle = color;
-    ctx.fillText(text, x + 1.5, y);
+    ctx.fillText(text, bx + 3.5, by + 7);
     ctx.restore();
-  }
+    return true;
+  };
+
+  /* --------------------------------------------------- 标签占位（避让用） */
+
+  /** 这块地方还空着吗（每帧清一次，先画的先占） */
+  Renderer.prototype.labelFits = function (x, y, w, h, pad) {
+    var boxes = this._labels;
+    if (!boxes) return true;
+    pad = pad == null ? 2 : pad;
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      if (x - pad < b.x + b.w && x + w + pad > b.x &&
+          y - pad < b.y + b.h && y + h + pad > b.y) return false;
+    }
+    return true;
+  };
+
+  Renderer.prototype.reserveLabel = function (x, y, w, h) {
+    if (!this._labels) this._labels = [];
+    this._labels.push({ x: x, y: y, w: w, h: h });
+  };
 
   function calText(mm) {
     if (!mm) return '';
@@ -611,7 +681,7 @@
       if (!s) continue;
       var own = s0.side === world.playerSide;
       var text = nm + (s0.cal ? ' ' + calText(s0.cal) : '');
-      drawTag(ctx, s.x + 8, s.y - 8, text,
+      this.drawTag(ctx, s.x + 8, s.y - 8, text,
         own ? 'rgba(165,240,255,0.96)' : 'rgba(255,178,148,0.96)');
 
       // 一条极淡的引线，指向开火的舰
@@ -642,7 +712,7 @@
       var ownT = t.side === world.playerSide;
       var label = t.ownerName + ' 鱼雷';
       if (!ownT && !t.spotted) label += '（当时未发现）';
-      drawTag(ctx, a.x + 6, a.y + 12, label,
+      this.drawTag(ctx, a.x + 6, a.y + 12, label,
         ownT ? 'rgba(165,240,255,0.96)'
           : (!t.spotted ? 'rgba(255,190,150,0.72)' : 'rgba(255,178,148,0.96)'));
     }
@@ -789,19 +859,50 @@
         var f = function (v) { return v >= 1000 ? (v / 1000).toFixed(1) + 'km' : Math.round(v) + 'm'; };
         errTxt = '测距±' + f(tr.errR) + ' 测向±' + f(tr.errC);
       }
-      ctx.font = '11px "Microsoft YaHei", system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = col;
-      ctx.fillText(label, s.x + unc + 6, s.y - 7);
-      ctx.fillStyle = esm ? 'rgba(217,166,255,0.72)' : 'rgba(255,193,92,0.65)';
-      ctx.font = '10px "Consolas", monospace';
-      ctx.fillText(((esm || flash) ? '仅方位  ' : U.fmtRange(dist) + '  ') +
+      /* 标签：右、左、上、下四个位置里挑一个空的。
+         挤不下就只写第一行；再挤不下就干脆不写 —— 叠在一起的字比没有还难认。 */
+      var sub = ((esm || flash) ? '仅方位  ' : U.fmtRange(dist) + '  ') +
         ((esm || flash) ? '' : Math.round(tr.course) + '° / ' + tr.speed.toFixed(0) + 'kn  ') +
         errTxt + (age >= 5 ? '  ' + Math.round(age) + 's前' : '') +
         (stale ? '  (陈旧)' : '') +
-        (burning ? '  火光' + (fireAge > 20 ? ' ' + Math.round(fireAge) + 's前' : '') : ''),
-        s.x + unc + 6, s.y + 7);
+        (burning ? '  火光' + (fireAge > 20 ? ' ' + Math.round(fireAge) + 's前' : '') : '');
+
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.font = '11px "Microsoft YaHei", system-ui, sans-serif';
+      var lw1 = ctx.measureText(label).width;
+      ctx.font = '10px "Consolas", monospace';
+      var lw2 = ctx.measureText(sub).width;
+      var lw = Math.max(lw1, lw2);
+      var cands = [
+        [s.x + unc + 6, s.y],                    // 右
+        [s.x - unc - 6 - lw, s.y],               // 左
+        [s.x - lw / 2, s.y - unc - 18],          // 上
+        [s.x - lw / 2, s.y + unc + 16]           // 下
+      ];
+      var spot = null;
+      for (var ci = 0; ci < cands.length; ci++) {
+        if (this.labelFits(cands[ci][0], cands[ci][1] - 12, lw + 4, 24)) { spot = cands[ci]; break; }
+      }
+      var oneLine = false;
+      if (!spot) {
+        for (var cj = 0; cj < cands.length; cj++) {
+          if (this.labelFits(cands[cj][0], cands[cj][1] - 8, lw1 + 4, 16)) {
+            spot = cands[cj]; oneLine = true; break;
+          }
+        }
+      }
+      if (spot) {
+        this.reserveLabel(spot[0], spot[1] - 12, lw + 4, oneLine ? 16 : 24);
+        ctx.fillStyle = col;
+        ctx.font = '11px "Microsoft YaHei", system-ui, sans-serif';
+        ctx.fillText(label, spot[0], spot[1] - 7);
+        if (!oneLine) {
+          ctx.fillStyle = esm ? 'rgba(217,166,255,0.72)' : 'rgba(255,193,92,0.65)';
+          ctx.font = '10px "Consolas", monospace';
+          ctx.fillText(sub, spot[0], spot[1] + 7);
+        }
+      }
 
       ctx.restore();
     }
@@ -926,13 +1027,18 @@
       this.drawShip(ctx, sh, s.x, s.y, cam.zoom, ui, foe,
         pv && pv.heading != null ? pv.heading : sh.heading, stale, pv);
 
-      /* 舰况速览：己方舰一直显示；回放里两边都显示（复盘看的是真相） */
+      /* 舰况速览：己方舰一直显示；回放里两边都显示（复盘看的是真相）。
+         拉远了以后满血的舰不画血条，标签最多挂一个 —— 否则整片海都是小块块。 */
       if (!foe || world.replay) {
         var sL = Math.max(sh._replay ? 22 : 12, sh.cls.length * cam.zoom);
         var sB = Math.max(sh._replay ? 8 : 4, sh.cls.beam * cam.zoom);
+        var far = cam.zoom < 0.03;
         this.drawShipStatus(ctx, sh, s.x, s.y, sL, sB, {
           alpha: stale ? 0.5 : 1,
-          report: pv
+          report: pv,
+          zoom: cam.zoom,
+          hurtOnly: far,
+          maxTags: far ? 1 : 3
         });
       }
 
@@ -980,24 +1086,62 @@
           }
         }
 
-        var L = Math.max(22, sh.cls.length * cam.zoom);
-        var nm = sh.name;
-        if (sh.sunk) nm += '（已沉没）';
-        else if (sh.speed > 0.4) nm += '  ' + Math.round(sh.speed) + 'kn';
-        ctx.save();
-        ctx.font = '10px "Microsoft YaHei", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        var tw = ctx.measureText(nm).width;
-        var ty = s.y + L * 0.6 + 6;
-        ctx.fillStyle = 'rgba(6,12,20,0.62)';
-        ctx.fillRect(s.x - tw / 2 - 3, ty - 1, tw + 6, 13);
-        ctx.fillStyle = sh.sunk ? 'rgba(150,160,170,0.85)'
-          : (foe ? 'rgba(255,178,148,0.95)' : 'rgba(180,235,255,0.95)');
-        ctx.fillText(nm, s.x, ty);
-        ctx.restore();
       }
     }
+
+    /* ---- 舰名单独走一轮 ----
+       先画重要的（选中的、旗舰、打残的），位置被占了就跳过。
+       以前只有回放才画舰名，实况里拉远了一整片海一个名字都没有。 */
+    var order = [];
+    for (var j = 0; j < world.ships.length; j++) {
+      var sj = world.ships[j];
+      if (sj.side !== world.playerSide && !world.showAllSides) continue;
+      if (sj.sunk) continue;
+      var pr = (ui.selected && ui.selected.has(sj.id)) ? 0
+        : (sj.role === 'flagship' ? 1 : (sj.hull < sj.hullMax * 0.6 ? 2 : 3));
+      order.push({ sh: sj, pr: pr, i: j });
+    }
+    order.sort(function (a, b) { return a.pr - b.pr || a.i - b.i; });
+    for (var q = 0; q < order.length; q++) {
+      var sn = order[q].sh;
+      var pvn = this.plotView(world, sn);
+      var ppn = (pvn && pvn.pos) ? pvn.pos : sn.pos;
+      var sn2 = cam.w2s(ppn, W, H);
+      if (sn2.x < -60 || sn2.x > W + 60 || sn2.y < -40 || sn2.y > H + 40) continue;
+      var Ln = Math.max(world.replay ? 22 : 10, sn.cls.length * cam.zoom);
+      this.drawShipName(ctx, sn, sn2.x, sn2.y, Ln, cam.zoom, {
+        foe: sn.side !== world.playerSide,
+        tier: world.replay ? 3 : null
+      });
+    }
+  };
+
+  /**
+   * 画一条舰的舰名。档位由缩放决定：拉远了只剩前两个字，再远就不画。
+   * 位置被别的标签占了也跳过 —— 挤在一起的字比没有还难认。
+   */
+  Renderer.prototype.drawShipName = function (ctx, sh, x, y, L, zoom, opts) {
+    opts = opts || {};
+    var tier = opts.tier != null ? opts.tier : labelTier(zoom);
+    if (tier <= 0) return false;
+    var nm = sh.name;
+    if (tier <= 1 && nm.length > 2) nm = nm.slice(0, 2);
+    else if (tier >= 3 && sh.speed > 0.4) nm += '  ' + Math.round(sh.speed) + 'kn';
+    var size = tier >= 2 ? 10 : 9;
+    ctx.save();
+    ctx.font = size + 'px "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    var tw = ctx.measureText(nm).width;
+    var ty = y + L * 0.6 + 6;
+    if (!this.labelFits(x - tw / 2 - 3, ty - 1, tw + 6, 13)) { ctx.restore(); return false; }
+    this.reserveLabel(x - tw / 2 - 3, ty - 1, tw + 6, 13);
+    ctx.fillStyle = 'rgba(6,12,20,0.62)';
+    ctx.fillRect(x - tw / 2 - 3, ty - 1, tw + 6, 13);
+    ctx.fillStyle = opts.foe ? 'rgba(255,178,148,0.95)' : 'rgba(180,235,255,0.95)';
+    ctx.fillText(nm, x, ty);
+    ctx.restore();
+    return true;
   };
 
   /**
@@ -1045,10 +1189,14 @@
    */
   Renderer.prototype.drawShipStatus = function (ctx, sh, x, y, L, B, opts) {
     opts = opts || {};
+    var zoom = opts.zoom;
+    if (zoom != null && zoom < 0.008) return;      // 太远了，血条和标签都别画
     var pv = opts.report || null;
     var bars = this.shipHealth(sh, pv);
     var hurt = false, i;
     for (i = 0; i < bars.length; i++) { if (bars[i] < 0.995) hurt = true; }
+    // 远景里满血的舰不占地方：只有挨了打的才画血条
+    var showBars = !(opts.hurtOnly && !hurt);
 
     /* ---- 血条：五段拼成一条，按分区权重分宽度 ---- */
     var wts = (sh.zones && sh.zones.hull) ? [
@@ -1059,7 +1207,7 @@
     for (i = 0; i < 5; i++) wsum += (wts[i] || 0);
     if (!(wsum > 0)) { wts = ZONE_W; wsum = 1; }
 
-    var w = U.clamp(L * 1.2, 18, 54);
+    var w = U.clamp(L * 1.2, (zoom != null && zoom < 0.03) ? 11 : 18, 54);
     var hgt = hurt ? 3.4 : 2.6;
     var bx = x - w / 2;
     var by = y - B * 0.5 - 6 - hgt;
@@ -1067,6 +1215,7 @@
 
     ctx.save();
     ctx.globalAlpha = alpha * (hurt ? 0.95 : 0.5);
+    if (showBars) {
     // 底槽
     ctx.fillStyle = 'rgba(4,10,16,0.72)';
     ctx.fillRect(bx - 1, by - 1, w + 2, hgt + 2);
@@ -1084,6 +1233,7 @@
         ctx.fillRect(cx, by, (sw - 0.6) * f, hgt);
       }
       cx += sw;
+    }
     }
     ctx.restore();
 
@@ -1998,7 +2148,8 @@
 
   /* ------------------------------------------------------------------ 罗盘 */
   Renderer.prototype.drawCompass = function (ctx, world, ui, W, H) {
-    var cx = W - 66, cy = 78, r = 34;
+    var u = this.usable();
+    var cx = u.x + u.w - 56, cy = u.y + 50, r = 34;
     var d, a, major, inner;
 
     ctx.save();
@@ -2063,7 +2214,8 @@
       if (nice[i] <= meters) pick = nice[i];
     }
     var px = pick * cam.zoom;
-    var x = 24, y = H - 26;
+    var u = this.usable();
+    var x = u.x + 20, y = u.y + u.h - 16;
 
     ctx.save();
     ctx.strokeStyle = 'rgba(180,225,245,0.6)';
@@ -2082,9 +2234,134 @@
     ctx.restore();
   };
 
+
+  /* ---------------------------------------------------------------- 图例 */
+
+  /**
+   * 图例：五段血条、十一种故障标签、四种接触符号。
+   * 贴在可用海图的左下角（避开左右面板和底部战报）。按 ? 收起。
+   */
+  Renderer.prototype.drawLegend = function (ctx, world, W, H) {
+    if (this.showLegend === false) return;
+    /* 回放默认收起：那是复盘镜头，画面越干净越好（按 ? 可以调出来） */
+    if (world && world.replay && this.showLegend !== true) return;
+    var u = this.usable();
+    if (u.w < 540 || u.h < 360) return;        // 窗口太小就别挤了
+
+    var w = 336, h = 134;
+    var x = u.x + 16, y = u.y + u.h - h - 36;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,14,21,0.80)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(120,180,200,0.22)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    /* 标题 */
+    ctx.font = '11px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = 'rgba(180,225,245,0.92)';
+    ctx.fillText('图例', x + 10, y + 13);
+    ctx.font = '9px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = 'rgba(120,160,180,0.75)';
+    ctx.textAlign = 'right';
+    ctx.fillText('按 ? 收起', x + w - 10, y + 13);
+    ctx.textAlign = 'left';
+
+    /* 血条：五段 + 颜色说明 */
+    var bx = x + 10, by = y + 27, bw = 96, bh = 4;
+    var wts = ZONE_W;
+    var cx = bx;
+    ctx.fillStyle = 'rgba(120,140,155,0.22)';
+    ctx.fillRect(bx, by, bw, bh);
+    var demo = [1, 0.62, 0.38, 1, 0.2];
+    for (var i = 0; i < 5; i++) {
+      var sw = bw * wts[i];
+      if (demo[i] > 0.004) {
+        ctx.fillStyle = hpColor(demo[i]);
+        ctx.fillRect(cx, by, sw - 0.8, bh);
+      }
+      cx += sw;
+    }
+    ctx.font = '9px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = 'rgba(150,190,210,0.85)';
+    ctx.fillText('五段：舰体 · 上层 · 武器 · 通讯 · 动力', bx + bw + 8, by + 2);
+
+    /* 颜色档位 */
+    var dy = y + 42;
+    var dots = [['#5fe08a', '>66%'], ['#ffc857', '33~66%'], ['#ff5f5f', '<33%']];
+    var dx = x + 10;
+    for (var d = 0; d < dots.length; d++) {
+      ctx.fillStyle = dots[d][0];
+      ctx.fillRect(dx, dy - 3, 7, 7);
+      ctx.fillStyle = 'rgba(150,190,210,0.8)';
+      ctx.fillText(dots[d][1], dx + 10, dy + 1);
+      dx += 10 + ctx.measureText(dots[d][1]).width + 14;
+    }
+    ctx.fillStyle = 'rgba(120,160,180,0.7)';
+    ctx.fillText('（血条颜色＝该分区剩余比例）', dx, dy + 1);
+
+    /* 故障标签：两个一组，自动换行 */
+    var chips = [{ t: '进水', c: '#4aa8ff' }, { t: '火灾', c: '#ff8a3d' }];
+    for (var f = 0; f < FAIL_TAGS.length; f++) chips.push({ t: FAIL_TAGS[f][1], c: FAIL_TAGS[f][2] });
+    ctx.font = '9px "Microsoft YaHei", sans-serif';
+    var tx = x + 10, ty = y + 58, limit = x + w - 10;
+    for (var c2 = 0; c2 < chips.length; c2++) {
+      var cw = ctx.measureText(chips[c2].t).width + 9;
+      if (tx + cw > limit) { tx = x + 10; ty += 15; }
+      ctx.fillStyle = 'rgba(4,10,16,0.78)';
+      ctx.fillRect(tx, ty - 6, cw, 12);
+      ctx.fillStyle = chips[c2].c;
+      ctx.fillRect(tx, ty - 6, 1.6, 12);
+      ctx.fillText(chips[c2].t, tx + 5, ty + 0.5);
+      tx += cw + 5;
+    }
+
+    /* 接触符号 */
+    var sy = ty + 20;
+    ctx.fillStyle = 'rgba(255,193,92,0.95)';
+    ctx.save();
+    ctx.translate(x + 15, sy);
+    ctx.rotate(Math.PI / 4);
+    ctx.strokeStyle = 'rgba(255,193,92,0.95)';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(-4, -4, 8, 8);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(150,190,210,0.85)';
+    ctx.fillText('未识别接触', x + 25, sy + 1);
+
+    ctx.save();
+    ctx.translate(x + 96, sy);
+    ctx.strokeStyle = 'rgba(255,122,99,0.95)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-5, 3); ctx.lineTo(5, 3); ctx.lineTo(4, -1); ctx.lineTo(-4, -1);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(150,190,210,0.85)';
+    ctx.fillText('已识别', x + 106, sy + 1);
+
+    ctx.fillStyle = '#d9a6ff';
+    ctx.fillRect(x + 166, sy - 3, 7, 7);
+    ctx.fillStyle = 'rgba(150,190,210,0.85)';
+    ctx.fillText('电探辐射源', x + 177, sy + 1);
+
+    ctx.fillStyle = '#ffb060';
+    ctx.fillRect(x + 254, sy - 3, 7, 7);
+    ctx.fillStyle = 'rgba(150,190,210,0.85)';
+    ctx.fillText('炮口闪光', x + 265, sy + 1);
+
+    ctx.restore();
+  };
+
   Renderer.prototype.drawWind = function (ctx, world, W, H) {
     var env = world.env;
-    var x = W - 62, y = 140;
+    var u = this.usable();
+    var x = u.x + u.w - 50, y = u.y + 116;
     var hv = Geo.headingVec(U.norm360(env.windDir + 180));
     ctx.save();
     ctx.globalAlpha = 0.5;
