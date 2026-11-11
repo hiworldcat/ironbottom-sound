@@ -70,6 +70,19 @@
     var q = '';
     try { q = (window.location && window.location.search) || ''; } catch (e) { q = ''; }
     if (/[?&]legend=0/.test(q)) game.renderer.showLegend = false;
+    if (/[?&]audio=0/.test(q)) game.audioOff = true;
+
+    /* 声音：浏览器要求先有一次点击/按键才让出声 */
+    if (N.Audio) {
+      N.Audio.setEnabled(!game.audioOff);
+      var wakeAudio = function () {
+        if (game.audioOff) return;
+        N.Audio.init();
+        N.Audio.resume();
+      };
+      window.addEventListener('pointerdown', wakeAudio);
+      window.addEventListener('keydown', wakeAudio);
+    }
     var auto = /[?&]autostart=1/.test(q);
     game.debug = /[?&]debug=1/.test(q);
     var m = /[?&]speed=(\d+(?:\.\d+)?)/.exec(q);
@@ -1033,6 +1046,20 @@
         game.hud.toast(game.renderer.showLegend ? '图例已打开' : '图例已收起');
         return;
       }
+      if (k === 'm') {
+        if (!N.Audio) return;
+        var on = !N.Audio.isEnabled();
+        N.Audio.setEnabled(on);
+        game.audioOff = !on;
+        game.hud.toast(on ? '声音已打开' : '声音已关闭（M 恢复）');
+        return;
+      }
+      if (k === '[' || k === ']') {
+        if (!N.Audio) return;
+        N.Audio.setVolume(N.Audio.volume() + (k === ']' ? 0.1 : -0.1));
+        game.hud.toast('音量 ' + Math.round(N.Audio.volume() * 100) + '%');
+        return;
+      }
       if (k === 'n') { game.toggleFlashless(); return; }
       if (k === 'g') { game.formSquad(); return; }
       if (k === 'h') { game.toggleSquadTurnMode(); return; }
@@ -1260,6 +1287,10 @@
       }
 
       updateBearingFrom(world);
+      if (N.Audio) {
+        if (game._audioWorld !== world) { N.Audio.attach(world); game._audioWorld = world; }
+        N.Audio.tick(world, game.camera, game.renderer.W, game.renderer.H, dtReal);
+      }
       game.renderer.draw(world, {
         camera: game.camera,
         selected: game.selected,
