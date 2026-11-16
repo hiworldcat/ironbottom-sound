@@ -71,6 +71,7 @@
     try { q = (window.location && window.location.search) || ''; } catch (e) { q = ''; }
     if (/[?&]legend=0/.test(q)) game.renderer.showLegend = false;
     if (/[?&]audio=0/.test(q)) game.audioOff = true;
+    if (N.Video) { N.Video.init(game); N.Video.applyParams(q); }
 
     /* 声音：浏览器要求先有一次点击/按键才让出声 */
     if (N.Audio) {
@@ -161,6 +162,7 @@
     document.body.classList.remove('replay-mode');
     game.hud.hideReplayBar();
     game.hud.resetLog();
+    if (N.Video) N.Video.afterStart();
     updateTimeButtons();
 
     // 镜头对准我方编队，并把近处的任务区域纳入画面
@@ -1052,6 +1054,21 @@
         N.Audio.setEnabled(on);
         game.audioOff = !on;
         game.hud.toast(on ? '声音已打开' : '声音已关闭（M 恢复）');
+        return;
+      }
+      if (k === 'u' && N.Video) {
+        var show = !N.Video.hudOn();
+        N.Video.setHud(show);
+        game.hud.toast(show ? '界面已恢复' : '界面已隐藏（U 恢复）');
+        return;
+      }
+      if (k === 'b' && N.Video) {
+        var ratio = N.Video.toggleLetterbox();
+        game.hud.toast(ratio ? '信箱边框 2.35:1（B 关闭）' : '信箱边框已关闭');
+        return;
+      }
+      if (k === 'v' && N.Video) {
+        N.Video.toggle();
         return;
       }
       if (k === '[' || k === ']') {

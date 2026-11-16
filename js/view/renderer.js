@@ -148,6 +148,9 @@
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.W = 0; this.H = 0; this.dpr = 1;
+    this.hudHidden = false;   // 隐藏所有面板，只留海图（录视频用）
+    this.bars = 0;            // 信箱边框高度（像素），0 = 不要
+    this.lbRatio = 0;         // 目标画幅比（2.35 = 宽银幕），0 = 关
     this.resize();
     var self = this;
     window.addEventListener('resize', function () { self.resize(); });
@@ -162,6 +165,7 @@
     this.canvas.height = Math.floor(h * dpr);
     this.W = w; this.H = h;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.lbRatio) this.setLetterbox(this.lbRatio);   // 窗口变了，黑边跟着重算
   };
 
   /* ------------------------------------------------------------------ 主绘制 */
@@ -202,6 +206,7 @@
     this.drawScale(ctx, cam, W, H);
     this.drawWind(ctx, world, W, H);
     this.drawLegend(ctx, world, W, H);
+    this.drawLetterbox(ctx, W, H);
 
     ctx.restore();
   };
@@ -243,20 +248,46 @@
    */
   Renderer.prototype.usable = function () {
     var W = this.W, H = this.H;
-    var iw = (typeof window !== 'undefined' && window.innerWidth) || W;
-    var left = 234, right = 308, top = 56, bottom = 152;
-    if (iw <= 900) { left = 0; right = 240; bottom = 0; }
-    else if (iw <= 1180) { left = 190; right = 268; }
-    if (W < left + right + 320) {
-      left = Math.min(left, Math.round(W * 0.18));
-      right = Math.min(right, Math.round(W * 0.22));
+    var bars = this.bars || 0;
+    var left = 0, right = 0, top = 0, bottom = 0;
+    if (!this.hudHidden) {
+      var iw = (typeof window !== 'undefined' && window.innerWidth) || W;
+      left = 234; right = 308; top = 56; bottom = 152;
+      if (iw <= 900) { left = 0; right = 240; bottom = 0; }
+      else if (iw <= 1180) { left = 190; right = 268; }
+      if (W < left + right + 320) {
+        left = Math.min(left, Math.round(W * 0.18));
+        right = Math.min(right, Math.round(W * 0.22));
+      }
+      if (H < top + bottom + 260) bottom = Math.min(bottom, Math.round(H * 0.16));
     }
-    if (H < top + bottom + 260) bottom = Math.min(bottom, Math.round(H * 0.16));
+    top += bars; bottom += bars;
     return {
       x: left, y: top,
       w: Math.max(240, W - left - right),
       h: Math.max(180, H - top - bottom)
     };
+  };
+
+  /**
+   * 信箱边框（2.35:1）。画在画布上而不是盖一层 DOM ——
+   * 这样 canvas.captureStream 导出来的视频也带黑边，和看到的完全一致。
+   */
+  Renderer.prototype.setLetterbox = function (ratio) {
+    this.lbRatio = ratio > 0 ? ratio : 0;
+    if (!this.lbRatio) { this.bars = 0; return 0; }
+    this.bars = Math.max(0, Math.round((this.H - this.W / this.lbRatio) / 2));
+    return this.bars;
+  };
+
+  Renderer.prototype.drawLetterbox = function (ctx, W, H) {
+    var bars = this.bars || 0;
+    if (!bars) return;
+    ctx.save();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, bars);
+    ctx.fillRect(0, H - bars, W, bars);
+    ctx.restore();
   };
 
   /* -------------------------------------------------------------------- 海面 */

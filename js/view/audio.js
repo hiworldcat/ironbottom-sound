@@ -18,7 +18,7 @@
   var U = N.U, V = N.V;
   var A = {};
 
-  var ctx = null, master = null, comp = null, limiter = null;
+  var ctx = null, master = null, comp = null, limiter = null, recDest = null;
   var busSfx = null, busAmb = null, busVoice = null;
   var white = null, pink = null;
 
@@ -687,6 +687,20 @@
 
   A.isEnabled = function () { return enabled; };
   A.isReady = function () { return ready; };
+
+  /**
+   * 给录制用的音频流。接在软限幅之后、扬声器之前 ——
+   * 录下来的电平和耳朵听到的一样，但不受系统音量影响。
+   */
+  A.captureStream = function () {
+    if (!ctx) A.init();
+    if (!ctx || !ctx.createMediaStreamDestination || !limiter) return null;
+    if (!recDest) {
+      recDest = ctx.createMediaStreamDestination();
+      limiter.connect(recDest);
+    }
+    return recDest.stream;
+  };
 
   /** 浏览器的自动播放策略：没有用户手势，AudioContext 会一直挂着 suspended */
   A.resume = function () {

@@ -1249,3 +1249,54 @@ body.replay-mode #sea { cursor: grab; }
   #bottom { right: 240px; }
   .mission-sub { display: none; }
 }
+
+/* ============================================================================
+   录视频：隐藏界面 + 录制徽标
+   U 藏掉四块面板，只留海图；信箱边框是画在画布上的（见 renderer.drawLetterbox），
+   所以这里只管面板。徽标不进画布，录出来的视频里不会有它。
+   ========================================================================== */
+body.hud-off #topbar,
+body.hud-off #roster,
+body.hud-off #details,
+body.hud-off #bottom,
+body.hud-off #replayBar { display: none !important; }
+
+#recBadge {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9998;
+  display: none;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px 6px 12px;
+  border-radius: 999px;
+  background: rgba(8, 14, 20, 0.84);
+  border: 1px solid rgba(255, 72, 72, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  font: 600 11.5px/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.14em;
+  color: #ffd2d2;
+  pointer-events: none;
+  user-select: none;
+}
+#recBadge.on { display: flex; }
+#recBadge i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff3b3b;
+  box-shadow: 0 0 10px rgba(255, 59, 59, 0.9);
+  animation: recPulse 1.15s ease-in-out infinite;
+}
+#recBadge b {
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes recPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.28; transform: scale(0.82); }
+}
