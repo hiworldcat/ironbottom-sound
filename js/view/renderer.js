@@ -212,20 +212,8 @@
   };
 
   /* ------------------------------------------------------- 岛屿包围盒 / 可见性 */
-  function islandBB(is) {
-    // World.isLand 也会缓存 _bb，但它只有 x0/y0/x1/y1，没有中心点
-    if (is._bb && is._bb.cx !== undefined) return is._bb;
-    var x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12;
-    for (var i = 0; i < is.poly.length; i++) {
-      var p = is.poly[i];
-      if (p.x < x0) x0 = p.x;
-      if (p.x > x1) x1 = p.x;
-      if (p.y < y0) y0 = p.y;
-      if (p.y > y1) y1 = p.y;
-    }
-    is._bb = { x0: x0, y0: y0, x1: x1, y1: y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
-    return is._bb;
-  }
+  // 包围盒的实现只有一份，在 data/scenarios.js（连中心点一起算好了）
+  var islandBB = N.islandBB;
   function bbVisible(bb, cam, W, H, pad) {
     pad = pad || 0;
     var a = cam.w2s({ x: bb.x0, y: bb.y1 }, W, H);   // 左上

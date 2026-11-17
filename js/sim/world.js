@@ -397,19 +397,8 @@
   };
 
   /** 岛的包围盒（懒算，isLand 和射界判定共用） */
-  function islandBB(is) {
-    if (is._bb) return is._bb;
-    var poly = is.poly;
-    var minx = 1e12, maxx = -1e12, miny = 1e12, maxy = -1e12;
-    for (var j = 0; j < poly.length; j++) {
-      if (poly[j].x < minx) minx = poly[j].x;
-      if (poly[j].x > maxx) maxx = poly[j].x;
-      if (poly[j].y < miny) miny = poly[j].y;
-      if (poly[j].y > maxy) maxy = poly[j].y;
-    }
-    is._bb = { x0: minx, y0: miny, x1: maxx, y1: maxy };
-    return is._bb;
-  }
+  // 包围盒的实现只有一份，在 data/scenarios.js（那边定义 ISLANDS，最顺）
+  var islandBB = N.islandBB;
 
   World.prototype.isLand = function (x, y) {
     var b = this.bounds;

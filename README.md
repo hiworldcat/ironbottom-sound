@@ -2182,6 +2182,8 @@ tools/
   gen-voice.py          用 Windows SAPI 烤电台语音 + 滤波/限幅/噪声底
   audio-probe.mjs       声音自检（假 AudioContext，查触发/衰减/节流/静音）
   video-probe.mjs       录视频自检（假画布 + 假 MediaRecorder，查黑边/轨道/落盘）
+  cdp-shot.mjs          用 CDP 开无头 Chrome 批量截图（配置在 shots.json）
+  archive/              退休的一次性脚本，别再跑（见里面的 README）
 ```
 
 ---

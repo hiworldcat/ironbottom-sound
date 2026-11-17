@@ -85,7 +85,7 @@
 
   /* ---------------------------------------------------------------- 工具 */
 
-  function aliveOf(world, side) {
+  function livingOf(world, side) {
     var out = [];
     for (var i = 0; i < world.ships.length; i++) {
       var s = world.ships[i];
@@ -253,7 +253,7 @@
     m.at = world.time;
     m.next = world.time + st.planEvery;
 
-    var ships = aliveOf(world, side);
+    var ships = livingOf(world, side);
     var pending = [];
     var tasks = [];
 
@@ -496,7 +496,7 @@
     var contacts = contactsOf(world, side, 120, true);
     if (!contacts.length) return null;
 
-    var ships = aliveOf(world, side);
+    var ships = livingOf(world, side);
 
     /* ---- 挑一个"值得照亮"的目标 ---- */
     var bestTr = null, bestScore = 0, bestFrom = null, bestD = 0;

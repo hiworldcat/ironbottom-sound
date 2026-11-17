@@ -200,9 +200,9 @@
 
   function stamp() {
     var d = new Date();
-    function p(n) { return (n < 10 ? '0' : '') + n; }
-    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
-      p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '-' +
+      pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
   }
 
   /* -------------------------------------------------------------- 启动 */

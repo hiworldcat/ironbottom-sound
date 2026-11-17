@@ -112,23 +112,34 @@
     return { id: id, name: name, kind: kind, x: lx(lon, lat), y: ly(lon, lat), hp: hp };
   }
 
+  /**
+   * 岛的包围盒（带中心点）。
+   * 点选、碰撞、渲染三处都要用，实现只留这一份 ——
+   * 以前 world.js 和 renderer.js 各写了一遍，还共用同一个 _bb 缓存，
+   * 谁先算谁说了算，是个定时炸弹。
+   */
+  function islandBB(is) {
+    if (is._bb) return is._bb;
+    var poly = is.poly;
+    var x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12;
+    for (var i = 0; i < poly.length; i++) {
+      var q = poly[i];
+      if (q.x < x0) x0 = q.x;
+      if (q.x > x1) x1 = q.x;
+      if (q.y < y0) y0 = q.y;
+      if (q.y > y1) y1 = q.y;
+    }
+    is._bb = { x0: x0, y0: y0, x1: x1, y1: y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+    return is._bb;
+  }
+  N.islandBB = islandBB;
+
   /** 点是不是落在某个岛上 */
   function isLandAt(x, y) {
     for (var i = 0; i < N.ISLANDS.length; i++) {
       var is = N.ISLANDS[i];
       // 先用包围盒粗筛：59 个岛、两千多个顶点，不筛的话每帧要算几十万次
-      var bb = is._bb;
-      if (!bb) {
-        var x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12;
-        for (var j = 0; j < is.poly.length; j++) {
-          var q = is.poly[j];
-          if (q.x < x0) x0 = q.x;
-          if (q.x > x1) x1 = q.x;
-          if (q.y < y0) y0 = q.y;
-          if (q.y > y1) y1 = q.y;
-        }
-        bb = is._bb = { x0: x0, y0: y0, x1: x1, y1: y1 };
-      }
+      var bb = islandBB(is);
       if (x < bb.x0 || x > bb.x1 || y < bb.y0 || y > bb.y1) continue;
       if (N.Geo.pointInPolygon({ x: x, y: y }, is.poly)) return true;
     }
