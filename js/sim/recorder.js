@@ -296,6 +296,9 @@
 
   /**
    * 生成 t 时刻的“世界快照”，结构与 World 兼容，可直接交给 Renderer 绘制。
+   *
+   * 只负责算插值系数，各块分给 _shell / _sampleShips / _sampleTracks /
+   * _sampleSquads / _sampleShore / _sampleProjectiles。
    */
   Replay.prototype.sampleAt = function (t) {
     var f = this.frames;
@@ -309,6 +312,17 @@
     var span = b.t - a.t;
     var k = span > 1e-6 ? U.clamp01((t - a.t) / span) : 0;
 
+    var world = this._shell(t, a, b);
+    this._sampleShips(world, f, i, a, b, k, t);
+    this._sampleTracks(world, a, b, k, t);
+    this._sampleSquads(world, a, b, k);
+    this._sampleShore(world, a, b, k);
+    this._sampleProjectiles(world, a, t);
+    return world;
+  };
+
+  /** 快照的空壳：气象、区域、各种空数组 */
+  Replay.prototype._shell = function (t, a, b) {
     var sc = this.scenario;
     var world = {
       time: t,
@@ -352,7 +366,11 @@
         return { x: 0, y: 0 };
       }
     };
+    return world;
+  };
 
+  /** 舰艇（位置/航向插值）+ 最近 90 秒的航迹线 */
+  Replay.prototype._sampleShips = function (world, f, i, a, b, k, t) {
     /* ---- 舰艇（插值） ---- */
     var mapA = {}, mapB = {};
     var q;
@@ -405,7 +423,12 @@
       if (tl) { tl.reverse(); tl.push({ x: tsh.pos.x, y: tsh.pos.y }); }
       tsh.trail = tl || [];
     }
+  };
 
+  /** 玩家侧的接触（只还原玩家那一侧） */
+  Replay.prototype._sampleTracks = function (world, a, b, k, t) {
+    var sc = this.scenario;
+    var q;
     /* ---- 玩家侧航迹 ---- */
     for (q = 0; q < a.tracks.length; q++) {
       var tr = a.tracks[q];
@@ -429,7 +452,11 @@
         source: 'visual'
       };
     }
+  };
 
+  /** 战列线：几何按帧插值，回放里照样能画出当时的队形 */
+  Replay.prototype._sampleSquads = function (world, a, b, k) {
+    var q;
     /* ---- 战列线：几何按帧插值，回放里照样能画出当时的队形 ---- */
     world.squads = [];
     var sqa = a.squads || [];
@@ -470,7 +497,12 @@
       }
       return null;
     };
+  };
 
+  /** 岸上目标（血量随时间变化） */
+  Replay.prototype._sampleShore = function (world, a, b, k) {
+    var sc = this.scenario;
+    var q;
     /* ---- 岸上目标（血量随时间变化） ---- */
     var defs = sc.shoreTargets || [];
     var prev = a.shore || [];
@@ -492,7 +524,11 @@
         destroyed: !!pa.d
       });
     }
+  };
 
+  /** 鱼雷 / 水柱 / 烟幕 / 照明弹 */
+  Replay.prototype._sampleProjectiles = function (world, a, t) {
+    var q;
     /* ---- 鱼雷 / 水柱 / 烟幕 / 照明 ---- */
     var self2 = this;
     function ownerName(id) {
@@ -548,8 +584,6 @@
         });
       }
     }
-
-    return world;
   };
 
   /** 时间轴上的重要事件 */

@@ -275,19 +275,6 @@
   };
 
   /* ------------------------------------------------------------------ 时钟 */
-  /**
-   * 场景内时钟：以 scenario.startTime（秒，当日 0 点起算）为起点。
-   */
-  function Clock(startSeconds) {
-    this.t = 0;                 // 场景经过秒数
-    this.start = startSeconds || 0;
-    this.scale = 1;             // 时间倍率
-    this.paused = false;
-  }
-  Clock.prototype.absolute = function () { return this.start + this.t; };
-  Clock.prototype.hhmmss = function () { return U.formatClock(this.absolute()); };
-  Clock.prototype.hhmm = function () { return U.formatClock(this.absolute()).slice(0, 5); };
-
   U.formatClock = function (sec) {
     sec = ((sec % 86400) + 86400) % 86400;
     var h = Math.floor(sec / 3600);
@@ -326,7 +313,6 @@
   N.V = V;
   N.Geo = Geo;
   N.RNG = RNG;
-  N.Clock = Clock;
   N.EventBus = EventBus;
 
   N.const = {

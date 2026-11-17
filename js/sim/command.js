@@ -169,11 +169,6 @@
    * ========================================================================== */
   var MISID = { life: 20, every: 130, err: 25 };
 
-  /** 这条船此刻正在把自己的哪条友舰当成敌人 */
-  function misIdOf(ship) {
-    return (ship && ship.ffTrack) ? ship.ffTrack : null;
-  }
-
   function clearMisId(world, ship) {
     if (!ship || !ship.ffTrack) return;
     var victim = world.shipById(ship.ffTrack.friendlyId);
@@ -938,7 +933,6 @@
     classify: classify,
     checkMisId: checkMisId,
     forceMisId: forceMisId,
-    misIdOf: misIdOf,
     clearMisId: clearMisId,
     MISID: MISID
   };

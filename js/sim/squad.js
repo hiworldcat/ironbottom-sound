@@ -255,13 +255,6 @@
     return { pos: p, heading: U.norm360(Geo.bearing({ x: 0, y: 0 }, { x: smp.tx, y: smp.ty })) };
   }
 
-  /** 整条战列线的两个端点（画图用） */
-  function lineSpan(sq) {
-    var n = sq.shipIds.length;
-    if (!n) return null;
-    return { a: stationOf(sq, 0).pos, b: stationOf(sq, n - 1).pos };
-  }
-
   /* ==========================================================================
    *  创建 / 解散
    * ========================================================================== */
@@ -491,14 +484,6 @@
     return sq.order;
   }
 
-  /** 重新写一遍每艘舰的站位序号 */
-  function reindex(world, sq) {
-    for (var i = 0; i < sq.shipIds.length; i++) {
-      var s = world.shipById(sq.shipIds[i]);
-      if (s) s.squadSlot = i;
-    }
-  }
-
   /** 领舰换人以后航迹要重铺，否则队形会倒跳 */
   function afterMove(world, sq, oldGuide) {
     if (!sq.shipIds.length) return;
@@ -584,21 +569,6 @@
       var sk = world.shipById(sq.shipIds[k]);
       if (sk) sk.squadSlot = k;
     }
-    afterMove(world, sq, oldGuide);
-    return true;
-  }
-
-  /** 直接指定整个站位顺序（必须是现有成员的排列），按行优先重新分线 */
-  function setOrder(world, sq, ids) {
-    if (!sq || !ids || ids.length !== sq.shipIds.length) return false;
-    var seen = {};
-    for (var i = 0; i < ids.length; i++) {
-      if (sq.shipIds.indexOf(ids[i]) < 0 || seen[ids[i]]) return false;
-      seen[ids[i]] = true;
-    }
-    var oldGuide = sq.shipIds[0];
-    sq.shipIds = ids.slice();
-    distribute(world, sq, lineCountOf(sq));
     afterMove(world, sq, oldGuide);
     return true;
   }
@@ -994,7 +964,6 @@
     swapStations: swapStations,
     moveToLane: moveToLane,
     setLanes: setLanes,
-    setOrder: setOrder,
     lineCountOf: lineCountOf,
     update: update,
     nextNumber: nextNumber,
@@ -1002,7 +971,6 @@
     decide: decide,
     stationKeep: stationKeep,
     stationOf: stationOf,
-    lineSpan: lineSpan,
     sampleTrack: sampleTrack,
     perLineOf: perLineOf,
     describe: describe

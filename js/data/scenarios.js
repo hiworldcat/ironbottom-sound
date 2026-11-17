@@ -81,15 +81,24 @@
   N.MAP.lx = lx;
   N.MAP.ly = ly;
 
-  /** 以经纬度为锚点、按纵队展开的一队舰 */
-  function fleet(side, group, lon, lat, hdg, spd, list) {
-    var p = at(lon, lat);
-    return column(side, group, p.x, p.y, hdg, spd, list);
-  }
-
   /**
    * 单舰：直接用经纬度、航向、航速摆位。
    * 史实剧本里每条船都有自己的位置和航向，用这个写比记几十万米的本地坐标可靠得多。
+   */
+  /**
+   * 一艘舰（经纬度定位）。
+   *
+   * 调用点有 250 多个，参数全是位置参数，写的时候对着这张表看：
+   *   side   'US' | 'JP'
+   *   group  编队名，只用来在名单里分组显示
+   *   cls    舰级 id，见 data/ships.js（'fletcher' / 'myoko' …）
+   *   name   舰名（中文）
+   *   lon lat 经纬度 —— 注意顺序是先经后纬，别和本地的 x/y 搞混
+   *   hdg    航向，度，0=正北顺时针
+   *   spd    航速，节
+   *   role   'screen' | 'flagship' | 'bombard' | …（默认 screen）
+   *   hull   舷号，可空
+   *   extra  额外字段，直接铺到舰对象上（如 { squad: 'x' }）
    */
   function vessel(side, group, cls, name, lon, lat, hdg, spd, role, hull, extra) {
     var p = at(lon, lat);
@@ -144,19 +153,6 @@
       if (N.Geo.pointInPolygon({ x: x, y: y }, is.poly)) return true;
     }
     return false;
-  }
-  /** 从 (x,y) 向外螺旋找最近的陆地（岸上目标必须钉在岸上） */
-  function nearestLand(x, y, maxR) {
-    maxR = maxR || 30000;
-    if (isLandAt(x, y)) return { x: x, y: y, d: 0 };
-    for (var r = 300; r <= maxR; r += 300) {
-      var n = Math.max(12, Math.round(r / 80));
-      for (var i = 0; i < n; i++) {
-        var p = Geo.dest({ x: x, y: y }, i * 360 / n, r);
-        if (isLandAt(p.x, p.y)) return { x: p.x, y: p.y, d: r };
-      }
-    }
-    return null;
   }
   N.MAP.isLandAt = isLandAt;
 
@@ -301,8 +297,14 @@
     return (world.scenario.victory && world.scenario.victory.timeLimit) || 2700;
   }
 
-  /* 编队小工具：从领舰位置沿航向反向依次排开一条纵队
-     list 每项：{ c:舰级, n:舰名, hull, role, gap:距领舰距离, off:横向偏移(+右舷), spd, extra } */
+  /**
+   * 编队小工具：从领舰位置沿航向反向依次排开一条纵队。
+   *   side/group  全队共用
+   *   leadX/leadY 领舰位置（本地米，不是经纬度）
+   *   hdg         全队航向
+   *   spd         全队航速（list 里可单舰覆盖）
+   *   list        每项 { c:舰级, n:舰名, hull, role, gap:距领舰距离, off:横向偏移(+右舷), spd, extra }
+   */
   function column(side, group, leadX, leadY, hdg, spd, list) {
     var out = [];
     for (var i = 0; i < list.length; i++) {
@@ -321,16 +323,6 @@
       out.push(o);
     }
     return out;
-  }
-
-  /** 汇入 forces 数组的小工具（单舰） */
-  function one(side, group, c, n, hull, x, y, hdg, spd, role, extra) {
-    var o = {
-      side: side, group: group, class: c, name: n, hull: hull || '',
-      x: x, y: y, heading: hdg, speed: spd, role: role || 'screen'
-    };
-    if (extra) for (var k in extra) o[k] = extra[k];
-    return o;
   }
 
   /** 常用目标判定 */

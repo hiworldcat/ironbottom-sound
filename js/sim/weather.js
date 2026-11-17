@@ -283,17 +283,6 @@
     return parts.join('，');
   }
 
-  /** 天气对三种传感器的影响，给 UI 列出来 */
-  function effects(world) {
-    var w = world.weather;
-    if (!w) return { radar: 1, radio: 0, visual: 1 };
-    return {
-      radar: radarFactor(world),
-      radio: radioExtra(world),
-      visual: w.baseVisibility > 0 ? w.visibility / w.baseVisibility : 1
-    };
-  }
-
   /** 战前「天气预报」：只用剧本 env，不含随机量（实际以现场为准） */
   function forecast(env) {
     env = env || {};
@@ -328,7 +317,6 @@
     status: status,
     brief: brief,
     forecast: forecast,
-    effects: effects,
     STEP: STEP
   };
 })(globalThis.Naval = globalThis.Naval || {});

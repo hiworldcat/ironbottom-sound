@@ -921,6 +921,14 @@
     });
   };
 
+  /**
+   * 右侧详情面板。拆成五块，各自只读自己那几个量：
+   *   renderSystems     船体/上层/动力的分条
+   *   renderOrders      航速、航向、命令、舷角、速度按钮
+   *   renderFireControl 目标、射程、岸轰、照明弹、无烟弹、开火状态、校射
+   *   renderWeapons     炮塔列表、鱼雷列表、烟幕/照明弹按钮
+   *   renderFloatplane  水侦按钮
+   */
   HUD.prototype.renderDetail = function (world) {
     var g = this.game;
     var sel = g.selected;
@@ -969,7 +977,18 @@
     this.el.barFire.style.width = U.clamp01(fireNow / 100) * 100 + '%';
     this.el.txtFire.textContent = Math.round(fireNow);
     this.el.dStatus.textContent = stale ? '数据已过期（无线电报告）' : ship.statusText();
+    var locked = ship.isPlayerControlled === false;
+    var tr = ship.targetTrackId ? N.Sensors.track(world, world.playerSide, ship.targetTrackId) : null;
 
+    this.renderSystems(ship, world, vw, stale);
+    this.renderOrders(ship, world, tr, hdgNow, spdNow, locked);
+    this.renderFireControl(ship, world, tr, locked);
+    this.renderWeapons(ship, tr, locked);
+    this.renderFloatplane(ship, world, locked);
+  };
+
+  /** 船体 / 上层结构 / 动力系统的分条（跟着无线电报告走） */
+  HUD.prototype.renderSystems = function (ship, world, vw, stale) {
     /* 结构分区：船体 / 上层结构（武器·通讯·其他）/ 动力系统（发动机·舵机·电力） */
     var zf = vw && vw.zones ? vw.zones : null;
     var sys = N.Damage ? N.Damage.systems(ship) : null;
@@ -1010,7 +1029,10 @@
     }
 
     this.renderDevices(ship, world, stale, vw);
+  };
 
+  /** 航速、航向、当前命令、舷角、速度按钮高亮 */
+  HUD.prototype.renderOrders = function (ship, world, tr, hdgNow, spdNow, locked) {
     this.el.dSpeed.textContent = spdNow.toFixed(1) + ' / ' + ship.effectiveMaxSpeed().toFixed(1) + ' kn';
     this.el.dHeading.textContent = Math.round(U.norm360(hdgNow)) + '° (' + U.bearingName(hdgNow) + ')';
     if (ship.pendingOrder) {
@@ -1028,10 +1050,7 @@
       var stt = world.shoreTargetById(ship.bombardTargetId);
       if (stt && !stt.destroyed) aimForRel = stt.pos;
     }
-    if (!aimForRel && ship.targetTrackId) {
-      var trr = N.Sensors.track(world, world.playerSide, ship.targetTrackId);
-      if (trr) aimForRel = trr.pos;
-    }
+    if (!aimForRel && tr) aimForRel = tr.pos;
     if (this.el.dRelBrg) {
       this.el.dRelBrg.textContent = aimForRel
         ? relText(ship.relativeBearing(aimForRel))
@@ -1041,7 +1060,6 @@
     this.drawHeadingDial(ship, hdgNow);
 
     // 速度按钮高亮
-    var locked = ship.isPlayerControlled === false;
     var frac = ship.cls.maxSpeed > 0 ? ship.orderedSpeed / ship.cls.maxSpeed : 0;
     var btns = this.el.speedBtns.querySelectorAll('button');
     for (var b = 0; b < btns.length; b++) {
@@ -1050,9 +1068,11 @@
       btns[b].classList.toggle('active', on);
       btns[b].disabled = locked;
     }
+  };
 
+  /** 火控：目标 / 射程 / 岸轰 / 照明弹 / 无烟弹 / 开火状态 / 校射 */
+  HUD.prototype.renderFireControl = function (ship, world, tr, locked) {
     // 火控
-    var tr = ship.targetTrackId ? N.Sensors.track(world, world.playerSide, ship.targetTrackId) : null;
     if (tr) {
       var dist = V.dist(ship.pos, tr.pos);
       this.el.dTarget.textContent = N.Sensors.idText(tr);
@@ -1139,7 +1159,10 @@
       this.el.dSpot.textContent = '未校射 · 火控收敛 ' + Math.round((1 - ship.errorScale) * 100) + '%';
       this.el.dSpot.style.color = '';
     }
+  };
 
+  /** 炮塔和鱼雷发射管的列表，以及烟幕/照明弹按钮 */
+  HUD.prototype.renderWeapons = function (ship, tr, locked) {
     // 主炮
     var mh = '';
     for (var i = 0; i < ship.mounts.length; i++) {
@@ -1196,7 +1219,10 @@
         ? ('照明弹 ' + Math.ceil(scd) + 's')
         : ('照明弹 <kbd>L</kbd>');
     }
+  };
 
+  /** 水上侦察机按钮 */
+  HUD.prototype.renderFloatplane = function (ship, world, locked) {
     /* ---- 水上侦察机 ---- */
     if (this.el.btnFloatplane) {
       var fp = ship.cls ? ship.cls.floatplane : null;
@@ -1628,6 +1654,11 @@
     ctx.fillText(String(Math.round(hdg)).padStart(3, '0') + '°', cx, CSS - 1);
   };
 
+  /**
+   * 仪表盘上的航向指针（和 renderer.js 的 needle 同款，但用的是 HUD 自己的 DEG）。
+   *   ctx 画布 / cx cy 圆心 / hdg 航向 / r 长度 / color 描边色 / w 线宽 /
+   *   arrow 是否画箭头 / dash 虚线样式
+   */
   function drawDialNeedle(ctx, cx, cy, hdg, r, color, w, arrow, dash) {
     var a = (hdg - 90) * U.DEG;
     var ex = cx + Math.cos(a) * r, ey = cy + Math.sin(a) * r;

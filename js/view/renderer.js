@@ -61,7 +61,17 @@
     return 0;
   }
 
-  /** 在 (sx,sy) 处沿罗经航向 hdg 画一根指针 */
+  /**
+   * 在屏幕坐标 (sx,sy) 处沿罗经航向 hdg 画一根指针。
+   *   ctx          画布上下文
+   *   sx sy        屏幕坐标（像素）
+   *   hdg          航向，度，0=正北顺时针
+   *   r            长度，像素
+   *   color        描边色
+   *   w            线宽
+   *   arrow        末端是否画箭头
+   *   dash         虚线样式数组，空则实线
+   */
   function needle(ctx, sx, sy, hdg, r, color, w, arrow, dash) {
     var a = (hdg - 90) * DEG;
     var ex = sx + Math.cos(a) * r, ey = sy + Math.sin(a) * r;
@@ -89,6 +99,13 @@
     }
   }
 
+  /**
+   * 海图的基准色板。
+   *
+   * 这里只放海图本身用得上的颜色。船体、标签、血条、面板还有一百多处
+   * 就地写的 rgba（同一个色不同透明度），那些不在这个表里 —— 要改配色
+   * 得连它们一起改，光动这张表是不够的。
+   */
   var COL = {
     seaTop: '#0a1a26',
     seaBot: '#050d14',
@@ -97,18 +114,8 @@
     land: '#1a2a1d',
     landHi: '#22371f',
     landEdge: '#3c5a37',
-    own: '#57d7ff',
-    ownDim: '#2b7fa0',
-    ownGlow: 'rgba(87,215,255,0.35)',
     contact: '#ffc15c',
-    contactId: '#ff7a63',
-    hostile: '#ff6b5e',
-    text: '#cfe6f2',
-    textDim: 'rgba(207,230,242,0.45)',
-    accent: '#39e0c4',
-    warn: '#ffb347',
-    danger: '#ff5252',
-    white: '#ffffff'
+    contactId: '#ff7a63'
   };
 
   /* ------------------------------------------------------------------ 相机 */
@@ -1391,6 +1398,18 @@
     ctx.restore();
   };
 
+  /**
+   * 画一艘舰。
+   *   ctx     画布上下文
+   *   sh      舰对象（sim 的，或回放里解出来的快照）
+   *   x y     舰体中心的屏幕坐标
+   *   zoom    当前缩放（像素/米），用来定舰体大小
+   *   ui      界面状态 {selected:Set, hoverShipId}
+   *   foe     是否敌舰 —— 只影响描边配色
+   *   heading 覆盖航向（回放/预测用），空则用 sh.heading
+   *   stale   位置是旧的 —— 整舰淡显
+   *   pv      回放插值出的临时状态，覆盖 sh 上的实时值（如 pv.fire）
+   */
   Renderer.prototype.drawShip = function (ctx, sh, x, y, zoom, ui, foe, heading, stale, pv) {
     var L = Math.max(sh._replay ? 22 : 12, sh.cls.length * zoom);
     var B = Math.max(sh._replay ? 8 : 4, sh.cls.beam * zoom);
@@ -2403,5 +2422,4 @@
 
   N.Camera = Camera;
   N.Renderer = Renderer;
-  N.COLORS = COL;
 })(globalThis.Naval = globalThis.Naval || {});

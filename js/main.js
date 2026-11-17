@@ -939,7 +939,23 @@
   };
 
   /* ---------------------------------------------------------------- 输入 */
+
+  /**
+   * 输入绑定。拆成四块：
+   *   bindMouse       画布上的鼠标/滚轮
+   *   bindKeys        键盘
+   *   bindTimeButtons 时间倍率按钮
+   *   bindTopButtons  顶栏按钮（简报 / 帮助 / 菜单 / 全览 / 回放）
+   */
   function bindInput() {
+    bindMouse();
+    bindKeys();
+    bindTimeButtons();
+    bindTopButtons();
+  }
+
+  /** 画布上的鼠标：左键框选和拖动、右键下令、中键平移、滚轮缩放、双击居中 */
+  function bindMouse() {
     var canvas = document.getElementById('sea');
     var drag = null;
 
@@ -1006,7 +1022,10 @@
       var s = pickShipAt(e.clientX, e.clientY);
       if (s) { game.camera.x = s.pos.x; game.camera.y = s.pos.y; }
     });
+  }
 
+  /** 键盘。标题画面上不响应；弹窗打开时只让 Esc 走 */
+  function bindKeys() {
     window.addEventListener('keydown', function (e) {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
       var k = e.key.toLowerCase();
@@ -1080,7 +1099,7 @@
       if (k === 'n') { game.toggleFlashless(); return; }
       if (k === 'g') { game.formSquad(); return; }
       if (k === 'h') { game.toggleSquadTurnMode(); return; }
-    if (k === 'k') { game.clearSquadRoute(); return; }
+      if (k === 'k') { game.clearSquadRoute(); return; }
       if (k === 'j') {
         game.setSquadOrderMode(game.squadOrderMode === 'move' ? 'course' : 'move');
         return;
@@ -1101,7 +1120,10 @@
       if (k === 'arrowup' || k === 'w') { game.camera.y += 300 / game.camera.zoom * 0.35; return; }
       if (k === 'arrowdown') { game.camera.y -= 300 / game.camera.zoom * 0.35; return; }
     });
+  }
 
+  /** 时间倍率按钮（1× / 2× / 5× / 10× / 暂停） */
+  function bindTimeButtons() {
     document.querySelectorAll('.tbtn[data-scale]').forEach(function (b) {
       b.addEventListener('click', function () {
         var v = parseFloat(b.dataset.scale);
@@ -1109,7 +1131,10 @@
         setTimeScale(v);
       });
     });
+  }
 
+  /** 顶栏按钮 */
+  function bindTopButtons() {
     document.getElementById('btnBrief').addEventListener('click', function () {
       if (!game.world || game.mode === 'replay') return;
       if (game.hud.isOverlayOpen()) return;

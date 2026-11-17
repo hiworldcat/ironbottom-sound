@@ -270,16 +270,6 @@
   /*  设备查询                                                              */
   /* ====================================================================== */
 
-  function techDevices(ship) {
-    var out = [];
-    if (!ship.devList) return out;
-    for (var i = 0; i < ship.devList.length; i++) {
-      var d = ship.devList[i];
-      if (d.kind !== 'gun' && d.kind !== 'torp') out.push(d);
-    }
-    return out;
-  }
-
   /** 某个结构区底下挂着哪些设备 */
   function zoneDevices(ship, zoneKey) {
     if (!ship.devList) return [];
@@ -698,11 +688,6 @@
     return elecFailed(ship) ? 1 / P.elecTorp : 1;
   }
 
-  /** 某座炮塔/鱼雷管现在能不能用 */
-  function mountOk(m) {
-    return !!m && !m.disabled && !m.fault && !m.destroyed;
-  }
-
   /** 转向受损比例 → 写回 steering 字段（兼容老接口） */
   function setSteering(ship, pct) {
     if (!ship.rudder) { ship.steering = pct; return; }
@@ -879,7 +864,6 @@
     iffError: iffError,
     gunRate: gunRate,
     torpRate: torpRate,
-    mountOk: mountOk,
     setSteering: setSteering,
     setPowerPct: setPowerPct,
     faults: faults,

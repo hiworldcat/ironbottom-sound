@@ -621,10 +621,15 @@
    * ========================================================================== */
   /**
    * 发射鱼雷齐射。
-   * @param {Ship} ship
-   * @param {Object} mount 鱼雷发射管
-   * @param {Object} aimPos 目标估计位置
-   * @param {Object} aimVel {course, speed} 目标估计运动
+   *   world       世界
+   *   ship        发射舰
+   *   mount       鱼雷发射管
+   *   aimPos      目标估计位置
+   *   aimCourse   目标估计航向，度
+   *   aimSpeedKn  目标估计航速，节
+   *   count       这次打几发（空则把管里剩的都打光）
+   *   spreadDeg   扇面宽度，度（默认 1.6）
+   * 返回实际发射数；舷侧没对准返回 -1；打不了返回 0。
    */
   function launchTorpedoes(world, ship, mount, aimPos, aimCourse, aimSpeedKn, count, spreadDeg) {
     if (ship.sunk || ship.sinking || mount.disabled || mount.destroyed || mount.fault) return 0;
