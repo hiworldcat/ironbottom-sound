@@ -107,8 +107,7 @@
    * 得连它们一起改，光动这张表是不够的。
    */
   var COL = {
-    seaTop: '#0a1a26',
-    seaBot: '#050d14',
+    seaShelf: '#17495f',
     grid: 'rgba(110,170,200,0.075)',
     gridMajor: 'rgba(110,170,200,0.14)',
     land: '#1a2a1d',
@@ -161,7 +160,51 @@
     this.resize();
     var self = this;
     window.addEventListener('resize', function () { self.resize(); });
+    this.loadRelief();
   }
+
+  /* ------------------------------------------------------------------ 晕渲图 */
+  /*
+   * 陆地的山体阴影。由 tools/build-relief.py 从 SRTM 高程数据离线烘出来，
+   * 运行时只是一张图 —— 逐像素算坡度在 60 fps 下不现实。图内联在
+   * js/data/relief.js 里（data URI），避免 file:// 下污染 canvas 让录像失效。
+   * 图是 1.5 公里一个像素，放大就糊，所以只在中远景叠加，拉近了自动淡出。
+   */
+  /* 迟一点再算：N.MAP 是 data/scenarios.js 定义的，而渲染器允许被单独加载
+     （video-probe 就只装 core + renderer + video），模块顶层不能碰它。 */
+  var RELIEF_RECT = null;
+  function reliefRect() {
+    if (RELIEF_RECT) return RELIEF_RECT;
+    var a = N.Geo.lonLatToXY(151.6, -3.7, N.MAP.refLon, N.MAP.refLat);
+    var b = N.Geo.lonLatToXY(163.4, -11.9, N.MAP.refLon, N.MAP.refLat);
+    RELIEF_RECT = { x0: a.x, y0: b.y, x1: b.x, y1: a.y };
+    return RELIEF_RECT;
+  }
+
+  Renderer.prototype.loadRelief = function () {
+    if (typeof Image === 'undefined' || !N.RELIEF_SRC) return;
+    var self = this;
+    var img = new Image();
+    img.onload = function () { self.relief = img; };
+    img.onerror = function () { self.relief = null; };   // 图坏了就当没有，别让整张地图挂掉
+    img.src = N.RELIEF_SRC;
+    this.relief = null;
+  };
+
+  Renderer.prototype.drawRelief = function (ctx, cam, W, H) {
+    var img = this.relief;
+    if (!img) return;
+    // 放大到 1 像素约 100 米以上就别画了，糊成一片还不如干净的等高线
+    var a = U.clamp((0.055 - cam.zoom) / 0.035, 0, 1);
+    if (a <= 0.02) return;
+    var R = reliefRect();
+    var p0 = cam.w2s({ x: R.x0, y: R.y1 }, W, H);
+    var p1 = cam.w2s({ x: R.x1, y: R.y0 }, W, H);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.drawImage(img, p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
+    ctx.restore();
+  };
 
   Renderer.prototype.resize = function () {
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -183,8 +226,8 @@
     this._labels = [];          // 每帧清一次标签占位，先画的先占地方
 
     this.drawSea(ctx, W, H);
-    this.drawGrid(ctx, cam, W, H);
     this.drawBathymetry(ctx, cam, W, H);
+    this.drawGrid(ctx, cam, W, H);
     this.drawLand(ctx, cam, W, H);
     this.drawZones(ctx, world, cam, W, H);
     this.drawShoreTargets(ctx, world, cam, W, H);
@@ -287,17 +330,9 @@
 
   /* -------------------------------------------------------------------- 海面 */
   Renderer.prototype.drawSea = function (ctx, W, H) {
-    var g = ctx.createLinearGradient(0, 0, W * 0.35, H);
-    g.addColorStop(0, COL.seaTop);
-    g.addColorStop(1, COL.seaBot);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-
-    // 轻微的深浅变化，避免大面积纯色
-    var rg = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.max(W, H) * 0.75);
-    rg.addColorStop(0, 'rgba(30,90,120,0.10)');
-    rg.addColorStop(1, 'rgba(0,0,0,0.28)');
-    ctx.fillStyle = rg;
+    // 0–200 米的浅海是底色。更深的层次由 drawBathymetry 一层层叠上去，
+    // 所以这里只铺一个均匀的底，不叠渐变 —— 渐变会和等深带打架。
+    ctx.fillStyle = COL.seaShelf;
     ctx.fillRect(0, 0, W, H);
   };
 
@@ -307,72 +342,152 @@
    * 露出水面的那一半就是一条从海岸向外变深的浅水带。比真的做多边形
    * 内缩便宜得多，视觉上已经足够像海图。
    */
+  /* ------------------------------------------------------------------ 等深线 */
+  /*
+   * 真实海深（Natural Earth 1:10m，公有领域）。每层是"比 d 米更深的全部海域"，
+   * 从浅到深一层层填，露出来的就是 0-200 / 200-1000 / … 的分带。
+   *
+   * 每层所有环画进同一个 path 再一次性 fill —— 几千个顶点逐条 fill 的话，
+   * 每帧光是状态切换就够呛。
+   */
+  var BATHY_FILL = {
+    200: '#14425a', 1000: '#11374c', 2000: '#0e2d3f', 3000: '#0c2635',
+    4000: '#0a202c', 5000: '#081a24', 6000: '#07151d', 7000: '#061117',
+    8000: '#050d12', 9000: '#040a0e', 10000: '#04080b'
+  };
+
+  /** 等深线环的包围盒，算一次存环上 */
+  function ringBB(ring) {
+    if (ring._bb) return ring._bb;
+    var x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12;
+    for (var i = 0; i < ring.length; i++) {
+      var p = ring[i];
+      if (p.x < x0) x0 = p.x;
+      if (p.x > x1) x1 = p.x;
+      if (p.y < y0) y0 = p.y;
+      if (p.y > y1) y1 = p.y;
+    }
+    ring._bb = { x0: x0, y0: y0, x1: x1, y1: y1 };
+    return ring._bb;
+  }
+
   Renderer.prototype.drawBathymetry = function (ctx, cam, W, H) {
-    var isl = N.ISLANDS;
-    var bands = [
-      [11000, 'rgba(44,116,146,0.055)'],
-      [5200, 'rgba(48,132,160,0.075)'],
-      [2000, 'rgba(56,152,176,0.10)']
-    ];
-    ctx.save();
-    ctx.lineJoin = 'round';
-    for (var i = 0; i < isl.length; i++) {
-      var bb = islandBB(isl[i]);
-      if (!bbVisible(bb, cam, W, H, 200)) continue;
+    var bands = N.BATHY;
+    var r = cam.visibleRect(W, H);
+
+    if (bands && bands.length) {
       for (var b = 0; b < bands.length; b++) {
-        var lw = bands[b][0] * 2 * cam.zoom;
-        if (lw < 1.5) continue;
-        pathIsland(ctx, isl[i].poly, cam, W, H);
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = bands[b][1];
-        ctx.stroke();
+        var band = bands[b];
+        if (!band.rings.length) continue;
+        ctx.fillStyle = BATHY_FILL[band.d] || '#0b222d';
+        ctx.beginPath();
+        var any = false;
+        for (var i = 0; i < band.rings.length; i++) {
+          var ring = band.rings[i];
+          var bb = ringBB(ring);
+          if (bb.x1 < r.x0 || bb.x0 > r.x1 || bb.y1 < r.y0 || bb.y0 > r.y1) continue;
+          any = true;
+          for (var j = 0; j < ring.length; j++) {
+            var p = ring[j];
+            var sx = (p.x - cam.x) * cam.zoom + W / 2;
+            var sy = H / 2 - (p.y - cam.y) * cam.zoom;
+            if (j === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+          }
+          ctx.closePath();
+        }
+        // even-odd：这些图层把浅滩和岛挖成了洞，靠奇偶规则空出来，
+        // 不依赖环的绕向（Natural Earth 的数据不保证 RFC 7946 的方向）
+        if (any) {
+          ctx.fill('evenodd');
+          // 等深线本身也描一道。没有这条线，深浅带看上去只是一团团色块；
+          // 有了它才读得出"这是 200 米等深线，那是 2000 米"
+          ctx.strokeStyle = 'rgba(96,158,186,0.13)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
     }
-    ctx.restore();
+
+    // 四周压暗一点，视线自然会收在中间
+    var rg = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45,
+      Math.max(W, H) * 0.78);
+    rg.addColorStop(0, 'rgba(20,80,110,0.06)');
+    rg.addColorStop(1, 'rgba(0,0,0,0.34)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, W, H);
   };
+
+  /* ------------------------------------------------------------------ 经纬网 */
+  /*
+   * 海图用度分，不用公里 —— 玩家看的是"我在东经 158 度 30 分"，
+   * 不是"我离某个任意原点 43 公里"。间距随缩放自动换档，
+   * 保证屏幕上不少于 70 px 一格。
+   */
+  var GRID_STEPS = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 2, 5];
+
+  /** 158.5 → "158°30′E" */
+  function degText(v, isLat) {
+    var a = Math.abs(v);
+    var d = Math.floor(a + 1e-9);
+    var m = Math.round((a - d) * 60);
+    if (m === 60) { d += 1; m = 0; }
+    var s = d + '°' + (m < 10 ? '0' + m : '' + m) + '′';
+    return s + (isLat ? (v >= 0 ? 'N' : 'S') : (v >= 0 ? 'E' : 'W'));
+  }
 
   Renderer.prototype.drawGrid = function (ctx, cam, W, H) {
     var r = cam.visibleRect(W, H);
-    var step = 5000;
-    // 缩放太小时放大网格间距
-    while (step * cam.zoom < 45) step *= 2;
-    var x0 = Math.floor(r.x0 / step) * step;
-    var y0 = Math.floor(r.y0 / step) * step;
+    var step = GRID_STEPS[GRID_STEPS.length - 1];
+    for (var i = 0; i < GRID_STEPS.length; i++) {
+      if (GRID_STEPS[i] * 110155 * cam.zoom >= 70) { step = GRID_STEPS[i]; break; }
+    }
+    var MAJOR = 5;   // 每 5 格一条粗线
 
+    var lon0 = N.MAP.refLon + r.x0 / 110155;
+    var lon1 = N.MAP.refLon + r.x1 / 110155;
+    var lat0 = N.MAP.refLat + r.y0 / 111320;
+    var lat1 = N.MAP.refLat + r.y1 / 111320;
+
+    ctx.save();
     ctx.lineWidth = 1;
-    ctx.font = '10px "Consolas", monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
 
-    for (var x = x0; x <= r.x1; x += step) {
-      var sx = (x - cam.x) * cam.zoom + W / 2;
-      var major = Math.abs(x) % (step * 4) < 1;
-      ctx.strokeStyle = major ? COL.gridMajor : COL.grid;
+    var k, gx, sx, gy, sy;
+    for (k = Math.floor(lon0 / step); k <= Math.ceil(lon1 / step); k++) {
+      gx = k * step;
+      sx = (N.Geo.lonLatToXY(gx, 0, N.MAP.refLon, N.MAP.refLat).x - cam.x) * cam.zoom + W / 2;
+      ctx.strokeStyle = (k % MAJOR === 0) ? COL.gridMajor : COL.grid;
       ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
     }
-    for (var y = y0; y <= r.y1; y += step) {
-      var sy = H / 2 - (y - cam.y) * cam.zoom;
-      var major2 = Math.abs(y) % (step * 4) < 1;
-      ctx.strokeStyle = major2 ? COL.gridMajor : COL.grid;
+    for (k = Math.floor(lat0 / step); k <= Math.ceil(lat1 / step); k++) {
+      gy = k * step;
+      sy = H / 2 - (N.Geo.lonLatToXY(0, gy, N.MAP.refLon, N.MAP.refLat).y - cam.y) * cam.zoom;
+      ctx.strokeStyle = (k % MAJOR === 0) ? COL.gridMajor : COL.grid;
       ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
     }
 
-    // 主网格标尺：只在缩得比较远的时候显示，避免糊在舰艇上
-    if (cam.zoom > 0.02) return;
+    // 度数标在可用区域的上沿和左沿，缩得太远就不标了
+    if (step * 110155 * cam.zoom < 110) { ctx.restore(); return; }
+    var u = this.usable();
     ctx.font = '10px "Consolas", monospace';
-    ctx.fillStyle = 'rgba(120,180,205,0.35)';
+    ctx.fillStyle = 'rgba(130,190,215,0.5)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    for (var gx = x0; gx <= r.x1; gx += step * 4) {
-      var gsx = (gx - cam.x) * cam.zoom + W / 2;
-      if (gsx < 4 || gsx > W - 60) continue;
-      ctx.fillText((Math.abs(gx) / 1000).toFixed(0) + (gx < 0 ? 'W' : 'E'), gsx + 3, 4);
+
+    for (k = Math.floor(lon0 / step); k <= Math.ceil(lon1 / step); k++) {
+      if (k % MAJOR !== 0) continue;
+      gx = k * step;
+      sx = (N.Geo.lonLatToXY(gx, 0, N.MAP.refLon, N.MAP.refLat).x - cam.x) * cam.zoom + W / 2;
+      if (sx < u.x + 2 || sx > u.x + u.w - 62) continue;
+      ctx.fillText(degText(gx, false), sx + 3, u.y + 3);
     }
-    for (var gy = y0; gy <= r.y1; gy += step * 4) {
-      var gsy = H / 2 - (gy - cam.y) * cam.zoom;
-      if (gsy < 4 || gsy > H - 16) continue;
-      ctx.fillText((Math.abs(gy) / 1000).toFixed(0) + (gy < 0 ? 'S' : 'N'), 4, gsy + 2);
+    for (k = Math.floor(lat0 / step); k <= Math.ceil(lat1 / step); k++) {
+      if (k % MAJOR !== 0) continue;
+      gy = k * step;
+      sy = H / 2 - (N.Geo.lonLatToXY(0, gy, N.MAP.refLon, N.MAP.refLat).y - cam.y) * cam.zoom;
+      if (sy < u.y + 16 || sy > u.y + u.h - 4) continue;
+      ctx.fillText(degText(gy, true), u.x + 3, sy + 1);
     }
+    ctx.restore();
   };
 
   /* -------------------------------------------------------------------- 陆地 */
@@ -432,6 +547,9 @@
       ctx.lineWidth = 3.2;
       ctx.stroke();
     }
+
+    // 山体阴影：盖在平涂的岛面上，中远景时岛屿才有"地形"而不是一块绿色
+    this.drawRelief(ctx, cam, W, H);
 
     // 岛屿名称
     ctx.textAlign = 'center';

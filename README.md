@@ -2128,6 +2128,8 @@ js/
   data/
     ships.js            火炮、鱼雷、舰级数据（美日双方）
     coastline.js        真实海岸线（Natural Earth 1:10m，59 个多边形，每个带海拔）
+    bathymetry.js       真实等深线（Natural Earth 1:10m，11 层，8660 个顶点）
+    relief.js           陆地晕渲图（SRTM 高程 → 山体阴影，data URI 内联）
     scenarios.js        场景注册表、场景定义
     ship-photos.js      舰名 → 历史照片（本地文件 + 维基条目）
     campaign.js         历史战役线：16 章的背景 / 史实 / 进度存档
@@ -2177,6 +2179,8 @@ tools/
   point-check.mjs       查一串经纬度是水还是陆，是陆就给出最近水面
   ne-final.mjs          Natural Earth 原始数据 → 裁剪 / 抽稀 / 命名
   ne-emit.mjs           生成 js/data/coastline.js
+  build-bathymetry.py   Natural Earth 等深线 → 裁剪 / 抽稀 → 生成 js/data/bathymetry.js
+  build-relief.py       AWS 高程瓦片 → 晕渲 → 生成 js/data/relief.js
   fetch-photos*.mjs     抓舰艇历史照片（英文/日文维基、大图）
   gen-ship-photos.mjs   生成 js/data/ship-photos.js
   gen-voice.py          用 Windows SAPI 烤电台语音 + 滤波/限幅/噪声底
@@ -2204,6 +2208,29 @@ tools/
   在这个范围内误差可以忽略。
 * 剧本里的坐标现在可以用经纬度写：`N.MAP.at(lon, lat)` / `N.MAP.lx` / `N.MAP.ly`。
   以前那些“随手写个 −30000, −5000”的坐标，正是所有战役都糊在图拉吉门口的原因。
+
+### 海深与地形
+
+海面不是一块平涂的蓝，陆地也不是一块平涂的绿：
+
+* **等深线**来自 **Natural Earth 1:10m bathymetry**（公有领域）。一共 11 层，从
+  “深于 200 米”到“深于 10000 米”，每层是一组带洞的多边形（洞就是浅滩和岛）。
+  从浅到深一层层叠着填，露出来的就是 0–200 / 200–1000 / … 的分带，再给每条
+  等深线描一道淡线。裁到海域、抽稀到约 90 米后剩 **8660 个顶点 / 157 KB**，
+  每帧整层一次 `fill('evenodd')`，全海域视角下大约 3.7 ms。
+* **陆地晕渲**来自 **AWS Terrain Tiles**（SRTM 等公开高程数据，公有领域）。
+  `tools/build-relief.py` 拉瓦片、算坡度、按西北来光做晕渲，再染成丛林色，
+  海面透明度为 0。成品 1500×1080，量化到 256 色后 **35 KB**。
+  运行时只是一次 `drawImage`，不做逐像素计算；放大到 100 米/像素以上就淡出，
+  换成岛内的等高线圈。
+* 两者都写进 `js/data/`，**不额外依赖网络**，`file://` 直接打开也有。
+
+> 为什么晕渲图是 base64 内联在 `relief.js` 里、而不是丢一个 png 到 `assets/`：
+> `file://` 下画过外部图片的 canvas 会被标记为 tainted，`canvas.captureStream()`
+> 会直接抛 `SecurityError` —— 也就是录像功能（V 键）会坏掉。data URI 不污染画布。
+
+> 经纬网用**度分**标注（`158°30′E`），不是“离某个原点多少公里”。海图本来就该这样，
+> 而且 `N.MAP.describe` 顶栏显示的也是经纬度，两边对得上。
 
 ### 每个战役都在它真正发生的那片水域
 

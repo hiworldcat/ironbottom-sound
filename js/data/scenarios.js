@@ -172,6 +172,19 @@
     };
   });
 
+  /* 真实等深线来自 js/data/bathymetry.js（Natural Earth 1:10m，公有领域）。
+     每层是"比 d 米更深的全部海域"，从浅到深叠着画就是分带。 */
+  N.BATHY = (N.BATHY_LL || []).map(function (b) {
+    return {
+      d: b.d,
+      rings: b.rings.map(function (r) {
+        return r.map(function (p) {
+          return N.Geo.lonLatToXY(p[0], p[1], N.MAP.refLon, N.MAP.refLat);
+        });
+      })
+    };
+  });
+
   /* --------------------------------------------------------- 海峡 / 海湾标注 */
   /* 只画名字，不参与碰撞；缩放太小时自然被裁掉 */
   N.MAP.labels = [
